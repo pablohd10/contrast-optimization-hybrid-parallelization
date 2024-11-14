@@ -24,3 +24,10 @@ Desarrollar un programa paralelo en C que:
 Para ejecutar la aplicación, usa el siguiente comando:
 ```bash
 srun -p gpus -N 1 -n 1 ./contrast
+
+
+## Descargar MPI
+descargar versiones:
+ - openmpi
+ - mpich 
+(o algo asi)
