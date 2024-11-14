@@ -28,7 +28,7 @@ srun -p gpus -N 1 -n 1 ./contrast
 
 ## Descargar MPI
 descargar versiones:
- - openmpi
+ - openmpi _(mejor integración con pmix)_
  - mpich (no se puede usar para usos comerciales)
   -> _(misma interfaz pero mejor runtime, le gusta más al profe)_
 (o algo asi)
