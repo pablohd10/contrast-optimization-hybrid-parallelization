@@ -29,5 +29,5 @@ srun -p gpus -N 1 -n 1 ./contrast
 ## Descargar MPI
 descargar versiones:
  - openmpi
- - mpich 
+ - mpich (no se puede usar para usos comerciales)
 (o algo asi)
