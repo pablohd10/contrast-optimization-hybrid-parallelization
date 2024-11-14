@@ -30,4 +30,5 @@ srun -p gpus -N 1 -n 1 ./contrast
 descargar versiones:
  - openmpi
  - mpich (no se puede usar para usos comerciales)
+  -> _(misma interfaz pero mejor runtime, le gusta más al profe)_
 (o algo asi)
