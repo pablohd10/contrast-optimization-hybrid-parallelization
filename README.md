@@ -19,6 +19,13 @@ Desarrollar un programa paralelo en C que:
 - **Formato de entrada**: `in.pgm` (escala de grises) y `in.ppm` (color)
 - **Formato de salida**: `out_hsl.ppm` y `out_yuv.ppm`
 
+## Compilación del Programa
+```bash
+$ cd build
+$ cmake .. -DCMAKE_CXX_COMPILER=mpicxx.mpich
+$ make
+```
+
 ## Ejecución del Programa
 
 Para ejecutar la aplicación, usa el siguiente comando:
