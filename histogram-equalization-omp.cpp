@@ -12,18 +12,15 @@ void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin
     for (i = 0; i < nbr_bin; i++){
         hist_out[i] = 0;
     }
-    
-    int num_threads, tid;
-    #pragma omp parallel private(num_threads, tid) shared(hist_out, img_size)
-    {
-        num_threads = omp_get_num_threads();
-        tid = omp_get_thread_num();
 
+    #pragma omp parallel shared(hist_out, img_size, img_in, nbr_bin)
+    {
         int local_hist_out[nbr_bin];
         for ( i = 0; i < nbr_bin; i ++){
             local_hist_out[i] = 0;
         }
 
+        int num_threads = omp_get_num_threads();
         int chunk = (img_size + num_threads - 1) / num_threads;
         #pragma omp for schedule (static, chunk)
             for (i = 0; i < img_size; i++) {
