@@ -1,6 +1,6 @@
 # Contrast Optimization using hybrid parallelization
 
-Este proyecto desarrolla una aplicación para mejorar el contraste en imágenes mediante la ecualización del histograma. La implementación está diseñada para ejecutarse en un entorno de cómputo de altas prestaciones, utilizando paralelización con MPI y OpenMP.
+Este proyecto desarrolla una aplicación para mejorar el contraste en imágenes mediante la ecualización del histograma. La implementación está diseñada para ejecutarse en un entorno de cómputo de altas prestaciones, utilizando paralelización con MPI y OpenMP. Se incluye la versión secuencial, paralela no distribuida (OpenMP) y paralela distribuida (OpenMP + MPI).
 
 ## Descripción del Proyecto
 
@@ -20,6 +20,7 @@ Desarrollar un programa paralelo en C que:
 - **Formato de salida**: `out_hsl.ppm` y `out_yuv.ppm`
 
 ## Compilación del Programa
+
 ```bash
 $ cd build
 $ cmake .. -DCMAKE_CXX_COMPILER=mpicxx.mpich
@@ -28,7 +29,7 @@ $ make
 
 ## Ejecución del Programa
 
-Para ejecutar la aplicación, usa el siguiente comando:
+Para ejecutar la aplicación en un entorno distribuido que utilice slurm como planificador, use el siguiente comando:
 ```bash
 srun -p gpus -N 1 -n 1 ./contrast
 ```

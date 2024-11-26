@@ -10,6 +10,7 @@ void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin
         hist_out[i] = 0;
     }
 
+    /* Count the number of occurrences of each pixel value --> go through each pixel of the image and increment the corresponding histogram index.*/
     for ( i = 0; i < img_size; i ++){
         hist_out[img_in[i]] ++;
     }

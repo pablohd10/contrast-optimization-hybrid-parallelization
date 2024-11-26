@@ -13,6 +13,7 @@ void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin
         hist_out[i] = 0;
     }
 
+    // Count the number of occurrences in the image for each pixel value --> go through the image and increment the corresponding histogram index.
     #pragma omp parallel shared(hist_out, img_size, img_in, nbr_bin)
     {
         int local_hist_out[nbr_bin];
