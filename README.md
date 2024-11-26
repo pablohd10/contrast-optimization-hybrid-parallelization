@@ -1,6 +1,6 @@
 # Contrast Optimization using hybrid parallelization
 
-Este proyecto desarrolla una aplicación para mejorar el contraste en imágenes mediante la ecualización del histograma. La implementación está diseñada para ejecutarse en un entorno de cómputo de altas prestaciones, utilizando paralelización con MPI y OpenMP. Se incluye la versión secuencial, paralela no distribuida (OpenMP) y paralela distribuida (OpenMP + MPI).
+Este proyecto desarrolla una aplicación para mejorar el contraste en imágenes mediante la ecualización del histograma. La implementación está diseñada para ejecutarse en un entorno de cómputo de altas prestaciones, utilizando paralelización con MPI y OpenMP. Se incluye la versión secuencial, paralela no distribuida (OpenMP), paralela distribuida (MPI), y paralela híbrida (OpenMP + MPI).
 
 ## Descripción del Proyecto
 
