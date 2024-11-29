@@ -61,6 +61,7 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
         
     }
     // POSSIBLE SECTION TO PARALLELIZE using OpenMP. This loop goes through each pixel of the image and assigns the new pixel value to the corresponding position of img_out. (O(w*h) time complexity)
+    
     /* Get the result image */
     for(i = 0; i < img_size; i ++){
         if(lut[img_in[i]] > 255){

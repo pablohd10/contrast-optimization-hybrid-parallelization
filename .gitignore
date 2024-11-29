@@ -1,2 +1,2 @@
 build/*
-!build/highres.jpg
+!build/sequential-output/time_results.txt

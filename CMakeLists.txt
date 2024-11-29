@@ -17,6 +17,6 @@ endif()
 
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
-add_executable(contrast contrast-enhancement.cpp histogram-equalization-omp.cpp  contrast.cpp)
+add_executable(contrast contrast-enhancement.cpp histogram-equalization.cpp  contrast.cpp)
 
 target_link_libraries(contrast ${MPI_C_LIBRARIES})

@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <iostream>
+#include <chrono>
+#include <fstream>  // For file handling
 #include "hist-equ.h"
 
 void run_cpu_color_test(PPM_IMG img_in);
@@ -10,7 +13,10 @@ void run_cpu_gray_test(PGM_IMG img_in);
 int main(){
     PGM_IMG img_ibuf_g;
     PPM_IMG img_ibuf_c;
-    
+
+    // Get start time using high_resolution_clock
+    auto start = std::chrono::high_resolution_clock::now();
+
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
     run_cpu_gray_test(img_ibuf_g);
@@ -21,6 +27,45 @@ int main(){
     run_cpu_color_test(img_ibuf_c);
     free_ppm(img_ibuf_c);
     
+    // Get end time
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // Calculate duration
+    std::chrono::duration<double> duration = end - start;
+    double time_taken = duration.count();  // Convert to seconds
+
+    // Print the time to the console
+    std::cout << "Time taken: " << time_taken << " seconds\n";
+
+    // Get Slurm job information
+    const char* partition = std::getenv("SLURM_JOB_PARTITION");
+    const char* nodes = std::getenv("SLURM_NNODES");
+    const char* tasks = std::getenv("SLURM_NTASKS");
+
+    // Check if running on Slurm in the 'gpus' partition
+    if (partition != nullptr && std::string(partition) == "gpus") {
+        // Open the file for appending
+        std::ofstream outfile("./sequential-output/time_results.txt", std::ios_base::app);
+        
+        // Check if the file is open successfully
+        if (outfile.is_open()) {
+            // Check if the file is empty by checking its size (use std::ios::ate to set file pointer to end)
+            outfile.seekp(0, std::ios::end);
+            if (outfile.tellp() == 0) {  // If file is empty, write headers
+                outfile << "N (Nodes)\tn (Processes)\tTime (seconds)\n";
+            }
+            
+            // Write the values in tabular format
+            outfile << "\t" << (nodes ? nodes : "N/A") << "\t\t\t"
+                    << (tasks ? tasks : "N/A") << "\t\t\t"
+                    << time_taken << "\n";
+            
+            outfile.close();  // Close the file
+        } else {
+            std::cerr << "Error opening file for writing.\n";
+        }
+    }
+
     return 0;
 }
 
