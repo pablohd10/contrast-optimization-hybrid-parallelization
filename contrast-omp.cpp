@@ -4,6 +4,7 @@
 #include <iostream>
 #include <chrono>
 #include <fstream>  // For file handling
+#include <omp.h>
 #include "hist-equ.h"
 
 void run_cpu_color_test(PPM_IMG img_in);
@@ -15,7 +16,11 @@ int main(){
     PGM_IMG img_ibuf_g;
     PPM_IMG img_ibuf_c;
     
+    // Get start time using high_resolution_clock
+    auto start = std::chrono::high_resolution_clock::now();
+
     // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (ppm and pgm). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
+    // HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
     // pgm
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
@@ -38,7 +43,6 @@ int main(){
     // Print the time to the console
     std::cout << "Time taken: " << time_taken << " seconds\n";
 
-    // Save results
     save_results_to_file(time_taken);
 
     return 0;
@@ -82,15 +86,16 @@ void run_cpu_color_test(PPM_IMG img_in)
     printf("Starting CPU processing...\n");
     
     // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (hsl and yuv). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
+    // HOWEVER maybe oversubscription is produced since we will have many threads at the same time as each of these functions are also parallelized (for loops)
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     printf("HSL processing time: %f (ms)\n", 0.0f /* TIMER */ );
     
-    write_ppm(img_obuf_hsl, "out_hsl.ppm");
+    write_ppm(img_obuf_hsl, "./omp-output/out_hsl.ppm");
 
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
     printf("YUV processing time: %f (ms)\n", 0.0f /* TIMER */);
     
-    write_ppm(img_obuf_yuv, "out_yuv.ppm");
+    write_ppm(img_obuf_yuv, "./omp-output/out_yuv.ppm");
     
     free_ppm(img_obuf_hsl);
     free_ppm(img_obuf_yuv);
@@ -109,7 +114,7 @@ void run_cpu_gray_test(PGM_IMG img_in)
     img_obuf = contrast_enhancement_g(img_in);
     printf("Processing time: %f (ms)\n", 0.0f /* TIMER */ );
     
-    write_pgm(img_obuf, "out.pgm");
+    write_pgm(img_obuf, "./omp-output/out.pgm");
     free_pgm(img_obuf);
 }
 
@@ -147,10 +152,11 @@ PPM_IMG read_ppm(const char * path){
     fread(ibuf,sizeof(unsigned char), 3 * result.w*result.h, in_file);
 
     // POSSIBLE SECTION TO PARALLELIZE. This loop goes through each pixel of the image and assigns the RGB values to the corresponding arrays. (O(w*h) time complexity)
-    for(i = 0; i < result.w*result.h; i ++){
-        result.img_r[i] = ibuf[3*i + 0];
-        result.img_g[i] = ibuf[3*i + 1];
-        result.img_b[i] = ibuf[3*i + 2];
+    #pragma omp parallel for schedule(static)
+    for (i = 0; i < result.w * result.h; i++) {
+        result.img_r[i] = ibuf[3 * i + 0];
+        result.img_g[i] = ibuf[3 * i + 1];
+        result.img_b[i] = ibuf[3 * i + 2];
     }
     
     fclose(in_file);

@@ -5,37 +5,24 @@
 #include "hist-equ.h"
 
 
-void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin){
-    omp_set_num_threads(omp_get_num_procs() - 1);
+void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin) {
 
+    // POSSIBLE SECTION TO PARALLELIZE.
+    omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 8-1 = 7 threads)
+
+    // Initialize each element of the histogram to 0. We decide not to parallelize this loop as it consists of only 256 iterations.
     int i;
     for (i = 0; i < nbr_bin; i++){
         hist_out[i] = 0;
     }
 
-    // Count the number of occurrences in the image for each pixel value --> go through the image and increment the corresponding histogram index.
-    #pragma omp parallel shared(hist_out, img_size, img_in, nbr_bin)
-    {
-        int local_hist_out[nbr_bin];
-        for ( i = 0; i < nbr_bin; i ++){
-            local_hist_out[i] = 0;
-        }
-
-        int num_threads = omp_get_num_threads();
-        int chunk = (img_size + num_threads - 1) / num_threads;
-        #pragma omp for schedule (static, chunk)
-            for (i = 0; i < img_size; i++) {
-                hist_out[img_in[i]]++;
-            }
-
-        #pragma omp critical
-        {
-            for (i = 0; i < nbr_bin; i++) {
-                hist_out[i] += local_hist_out[i];
-            }
-        }
+    // Count the number of occurrences in the image for each pixel value
+    #pragma omp parallel for reduction(+: hist_out[:nbr_bin]) schedule(static)// Reduction addition operation on hist_out. Iterations are evenly distibuted across threads
+    for (int i = 0; i < img_size; i++) {
+        hist_out[img_in[i]]++;  // Update global histogram directly
     }
 }
+
 
 void histogram_equalization(unsigned char * img_out, unsigned char * img_in, 
                             int * hist_in, int img_size, int nbr_bin){
@@ -49,7 +36,9 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
         min = hist_in[i++];
     }
     d = img_size - min;
-    // POSSIBLE SECTION TO PARALLELIZE using OpenMP (although there are only 256 iterations, maybe it's not worth it. think about it)
+
+    // POSSIBLE SECTION TO PARALLELIZE.
+    // We decide not to parallelize this loop as it consists of only 256 iterations.
     for(i = 0; i < nbr_bin; i ++){
         cdf += hist_in[i];
         //lut[i] = (cdf - min)*(nbr_bin - 1)/d;
@@ -60,18 +49,18 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
         
         
     }
-    // POSSIBLE SECTION TO PARALLELIZE using OpenMP. This loop goes through each pixel of the image and assigns the new pixel value to the corresponding position of img_out. (O(w*h) time complexity)
     
+    // POSSIBLE SECTION TO PARALLELIZE.
     /* Get the result image */
-    for(i = 0; i < img_size; i ++){
-        if(lut[img_in[i]] > 255){
-            img_out[i] = 255;
+    #pragma omp parallel for schedule(static) // Iterations are evenly distibuted across threads (independent and identical operations)
+        for(int i = 0; i < img_size; i ++){
+            if(lut[img_in[i]] > 255){
+                img_out[i] = 255;
+            }
+            else{
+                img_out[i] = (unsigned char)lut[img_in[i]];
+            }
         }
-        else{
-            img_out[i] = (unsigned char)lut[img_in[i]];
-        }
-        
-    }
 }
 
 

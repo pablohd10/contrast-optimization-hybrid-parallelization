@@ -28,6 +28,7 @@ PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in)
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     
+    /* MAYBE PARALLELIZE THIS AS THEY ARE 3 INDEPENDENT OPERATIONS (r,g,b). HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
     histogram(hist, img_in.img_r, img_in.h * img_in.w, 256);
     histogram_equalization(result.img_r,img_in.img_r,hist,result.w*result.h, 256);
     histogram(hist, img_in.img_g, img_in.h * img_in.w, 256);
@@ -93,7 +94,6 @@ PPM_IMG contrast_enhancement_c_hsl(PPM_IMG img_in)
 //Output H, S in [0.0, 1.0] and L in [0, 255]
 HSL_IMG rgb2hsl(PPM_IMG img_in)
 {
-    int i;
     float H, S, L;
     HSL_IMG img_out;// = (HSL_IMG *)malloc(sizeof(HSL_IMG));
     img_out.width  = img_in.w;
@@ -103,7 +103,8 @@ HSL_IMG rgb2hsl(PPM_IMG img_in)
     img_out.l = (unsigned char *)malloc(img_in.w * img_in.h * sizeof(unsigned char));
     
     // POSSIBLE SECTION TO PARALLELIZE using OpenMP.
-    for(i = 0; i < img_in.w*img_in.h; i ++){
+    #pragma omp parallel for private(H,S,L) schedule(static)
+    for(int i = 0; i < img_in.w*img_in.h; i ++){
         
         float var_r = ( (float)img_in.img_r[i]/255 );//Convert RGB to [0,1]
         float var_g = ( (float)img_in.img_g[i]/255 );
@@ -171,7 +172,6 @@ float Hue_2_RGB( float v1, float v2, float vH )             //Function Hue_2_RGB
 //Output R,G,B in [0, 255]
 PPM_IMG hsl2rgb(HSL_IMG img_in)
 {
-    int i;
     PPM_IMG result;
     
     result.w = img_in.width;
@@ -181,7 +181,8 @@ PPM_IMG hsl2rgb(HSL_IMG img_in)
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     
     // POSSIBLE SECTION TO PARALLELIZE.
-    for(i = 0; i < img_in.width*img_in.height; i ++){
+    #pragma omp parallel for schedule(static)
+    for(int i = 0; i < img_in.width*img_in.height; i ++){
         float H = img_in.h[i];
         float S = img_in.s[i];
         float L = img_in.l[i]/255.0f;
@@ -231,6 +232,7 @@ YUV_IMG rgb2yuv(PPM_IMG img_in)
     img_out.img_v = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
 
     // POSSIBLE SECTION TO PARALLELIZE.
+    #pragma omp parallel for private(r, g, b, y, cb, cr) schedule(static)
     for(i = 0; i < img_out.w*img_out.h; i ++){
         r = img_in.img_r[i];
         g = img_in.img_g[i];
@@ -262,7 +264,6 @@ unsigned char clip_rgb(int x)
 PPM_IMG yuv2rgb(YUV_IMG img_in)
 {
     PPM_IMG img_out;
-    int i;
     int  rt,gt,bt;
     int y, cb, cr;
     
@@ -274,7 +275,8 @@ PPM_IMG yuv2rgb(YUV_IMG img_in)
     img_out.img_b = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
 
     // POSSIBLE SECTION TO PARALLELIZE.
-    for(i = 0; i < img_out.w*img_out.h; i ++){
+    #pragma omp parallel for private(y, cb, cr, rt, gt, bt) schedule(static)
+    for(int i = 0; i < img_out.w*img_out.h; i ++){
         y  = (int)img_in.img_y[i];
         cb = (int)img_in.img_u[i] - 128;
         cr = (int)img_in.img_v[i] - 128;
@@ -283,7 +285,7 @@ PPM_IMG yuv2rgb(YUV_IMG img_in)
         gt  = (int)( y - 0.344*cb - 0.714*cr);
         bt  = (int)( y + 1.772*cb);
 
-        img_out.img_r[i] = clip_rgb(rt);
+        img_out.img_r[i] = clip_rgb(rt); 
         img_out.img_g[i] = clip_rgb(gt);
         img_out.img_b[i] = clip_rgb(bt);
     }

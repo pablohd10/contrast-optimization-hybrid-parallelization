@@ -31,7 +31,7 @@ $ make
 
 Para ejecutar la aplicación en un entorno distribuido que utilice slurm como planificador, use el siguiente comando:
 ```bash
-srun -p gpus -N 1 -n 1 ./contrast
+srun -p gpus -N <número de nodos> -n <número de tareas> ./contrast
 ```
 
 ## Descargar MPI
