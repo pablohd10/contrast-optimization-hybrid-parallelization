@@ -8,6 +8,7 @@
 
 void run_cpu_color_test(PPM_IMG img_in);
 void run_cpu_gray_test(PGM_IMG img_in);
+void save_results_to_file(double time_taken);
 
 
 int main(){
@@ -37,6 +38,13 @@ int main(){
     // Print the time to the console
     std::cout << "Time taken: " << time_taken << " seconds\n";
 
+    // Save results
+    save_results_to_file(time_taken);
+
+    return 0;
+}
+
+void save_results_to_file(double time_taken) {
     // Get Slurm job information
     const char* partition = std::getenv("SLURM_JOB_PARTITION");
     const char* nodes = std::getenv("SLURM_NNODES");
@@ -45,11 +53,11 @@ int main(){
     // Check if running on Slurm in the 'gpus' partition
     if (partition != nullptr && std::string(partition) == "gpus") {
         // Open the file for appending
-        std::ofstream outfile("./sequential-output/time_results.txt", std::ios_base::app);
+        std::ofstream outfile("./omp-output/time_results.txt", std::ios_base::app);
         
         // Check if the file is open successfully
         if (outfile.is_open()) {
-            // Check if the file is empty by checking its size (use std::ios::ate to set file pointer to end)
+            // Check if the file is empty by checking its size
             outfile.seekp(0, std::ios::end);
             if (outfile.tellp() == 0) {  // If file is empty, write headers
                 outfile << "N (Nodes)\tn (Processes)\tTime (seconds)\n";
@@ -65,8 +73,6 @@ int main(){
             std::cerr << "Error opening file for writing.\n";
         }
     }
-
-    return 0;
 }
 
 void run_cpu_color_test(PPM_IMG img_in)
