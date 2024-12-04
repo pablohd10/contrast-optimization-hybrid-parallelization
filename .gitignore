@@ -1,3 +1,5 @@
 build/*
 !build/sequential-output/time_results.txt
 !build/omp-output/time_results.txt
+!build/mpi-output/time_results.txt
+!build/mpi-omp-output/time_results.txt
