@@ -52,7 +52,7 @@ void save_results_to_file(double time_taken) {
     // Check if running on Slurm in the 'gpus' partition
     if (partition != nullptr && std::string(partition) == "gpus") {
         // Open the file for appending
-        std::ofstream outfile("./sequential-output/time_results.txt", std::ios_base::app);
+        std::ofstream outfile("./mpi-output/time_results.txt", std::ios_base::app);
         
         // Check if the file is open successfully
         if (outfile.is_open()) {
@@ -83,12 +83,12 @@ void run_cpu_color_test(PPM_IMG img_in)
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     printf("HSL processing time: %f (ms)\n", 0.0f /* TIMER */ );
     
-    write_ppm(img_obuf_hsl, "./sequential-output/out_hsl.ppm");
+    write_ppm(img_obuf_hsl, "./mpi-output/out_hsl.ppm");
 
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
     printf("YUV processing time: %f (ms)\n", 0.0f /* TIMER */);
     
-    write_ppm(img_obuf_yuv, "./sequential-output/out_yuv.ppm");
+    write_ppm(img_obuf_yuv, "./mpi-output/out_yuv.ppm");
     
     free_ppm(img_obuf_hsl);
     free_ppm(img_obuf_yuv);
@@ -107,7 +107,7 @@ void run_cpu_gray_test(PGM_IMG img_in)
     img_obuf = contrast_enhancement_g(img_in);
     printf("Processing time: %f (ms)\n", 0.0f /* TIMER */ );
     
-    write_pgm(img_obuf, "./sequential-output/out.pgm");
+    write_pgm(img_obuf, "./mpi-output/out.pgm");
     free_pgm(img_obuf);
 }
 
