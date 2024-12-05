@@ -19,6 +19,10 @@ int main(){
     // Get start time using high_resolution_clock
     auto start = std::chrono::high_resolution_clock::now();
 
+    // NUMBER OF THREADS
+    omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 8-1 = 7 threads)
+
+
     // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (ppm and pgm). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
     // HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
     // pgm

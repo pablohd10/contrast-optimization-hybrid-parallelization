@@ -8,8 +8,6 @@
 void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin) {
 
     // POSSIBLE SECTION TO PARALLELIZE.
-    omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 8-1 = 7 threads)
-
     // Initialize each element of the histogram to 0. We decide not to parallelize this loop as it consists of only 256 iterations.
     int i;
     for (i = 0; i < nbr_bin; i++){
