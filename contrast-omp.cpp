@@ -9,7 +9,7 @@
 
 void run_cpu_color_test(PPM_IMG img_in);
 void run_cpu_gray_test(PGM_IMG img_in);
-void save_results_to_file(double time_taken);
+void save_results_to_file(double time_taken, int max_threads);
 
 
 int main(){
@@ -20,8 +20,8 @@ int main(){
     auto start = std::chrono::high_resolution_clock::now();
 
     // NUMBER OF THREADS
-    omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 8-1 = 7 threads)
-
+    omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 12-1 = 11 threads)
+    int max_threads = omp_get_max_threads();
 
     // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (ppm and pgm). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
     // HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
@@ -47,12 +47,12 @@ int main(){
     // Print the time to the console
     std::cout << "Time taken: " << time_taken << " seconds\n";
 
-    save_results_to_file(time_taken);
+    save_results_to_file(time_taken, max_threads);
 
     return 0;
 }
 
-void save_results_to_file(double time_taken) {
+void save_results_to_file(double time_taken, int max_threads) {
     // Get Slurm job information
     const char* partition = std::getenv("SLURM_JOB_PARTITION");
     const char* nodes = std::getenv("SLURM_NNODES");
@@ -68,12 +68,13 @@ void save_results_to_file(double time_taken) {
             // Check if the file is empty by checking its size
             outfile.seekp(0, std::ios::end);
             if (outfile.tellp() == 0) {  // If file is empty, write headers
-                outfile << "N (Nodes)\tn (Processes)\tTime (seconds)\n";
+                outfile << "N (Nodes)\tn (Processes)\tThreads\t\tTime (seconds)\n";
             }
             
             // Write the values in tabular format
             outfile << "\t" << (nodes ? nodes : "N/A") << "\t\t\t"
-                    << (tasks ? tasks : "N/A") << "\t\t\t"
+                    << (tasks ? tasks : "N/A") << "\t\t\t\t"
+                    << max_threads << "\t\t"
                     << time_taken << "\n";
             
             outfile.close();  // Close the file
