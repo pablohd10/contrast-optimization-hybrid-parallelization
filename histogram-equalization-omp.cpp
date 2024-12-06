@@ -60,6 +60,3 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
             }
         }
 }
-
-
-

@@ -240,4 +240,3 @@ void free_pgm(PGM_IMG img)
 {
     free(img.img);
 }
-
