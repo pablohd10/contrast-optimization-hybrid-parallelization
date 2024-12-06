@@ -177,6 +177,7 @@ void write_ppm(PPM_IMG img, const char * path){
     char * obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
 
     // POSSIBLE SECTION TO PARALLELIZE. This loop goes through each pixel of the image and assigns the RGB values to the corresponding position of obuf. (O(w*h) time complexity)
+    #pragma omp parallel for schedule(static)
     for(i = 0; i < img.w*img.h; i ++){
         obuf[3*i + 0] = img.img_r[i];
         obuf[3*i + 1] = img.img_g[i];
