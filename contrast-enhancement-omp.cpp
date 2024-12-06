@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include "hist-equ.h"
 
-PGM_IMG contrast_enhancement_g(PGM_IMG img_in)
-{
+
+PGM_IMG contrast_enhancement_g(PGM_IMG img_in){
     PGM_IMG result;
     int hist[256];
     
@@ -17,8 +17,7 @@ PGM_IMG contrast_enhancement_g(PGM_IMG img_in)
     return result;
 }
 
-PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in)
-{
+PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in){
     PPM_IMG result;
     int hist[256];
     
@@ -40,8 +39,7 @@ PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in)
 }
 
 
-PPM_IMG contrast_enhancement_c_yuv(PPM_IMG img_in)
-{
+PPM_IMG contrast_enhancement_c_yuv(PPM_IMG img_in){
     YUV_IMG yuv_med;
     PPM_IMG result;
     
@@ -65,8 +63,7 @@ PPM_IMG contrast_enhancement_c_yuv(PPM_IMG img_in)
     return result;
 }
 
-PPM_IMG contrast_enhancement_c_hsl(PPM_IMG img_in)
-{
+PPM_IMG contrast_enhancement_c_hsl(PPM_IMG img_in){
     HSL_IMG hsl_med;
     PPM_IMG result;
     
@@ -92,8 +89,7 @@ PPM_IMG contrast_enhancement_c_hsl(PPM_IMG img_in)
 
 //Convert RGB to HSL, assume R,G,B in [0, 255]
 //Output H, S in [0.0, 1.0] and L in [0, 255]
-HSL_IMG rgb2hsl(PPM_IMG img_in)
-{
+HSL_IMG rgb2hsl(PPM_IMG img_in){
     float H, S, L;
     HSL_IMG img_out;// = (HSL_IMG *)malloc(sizeof(HSL_IMG));
     img_out.width  = img_in.w;
@@ -158,8 +154,7 @@ HSL_IMG rgb2hsl(PPM_IMG img_in)
     return img_out;
 }
 
-float Hue_2_RGB( float v1, float v2, float vH )             //Function Hue_2_RGB
-{
+float Hue_2_RGB( float v1, float v2, float vH )             //Function Hue_2_RGB{
     if ( vH < 0 ) vH += 1;
     if ( vH > 1 ) vH -= 1;
     if ( ( 6 * vH ) < 1 ) return ( v1 + ( v2 - v1 ) * 6 * vH );
@@ -170,8 +165,7 @@ float Hue_2_RGB( float v1, float v2, float vH )             //Function Hue_2_RGB
 
 //Convert HSL to RGB, assume H, S in [0.0, 1.0] and L in [0, 255]
 //Output R,G,B in [0, 255]
-PPM_IMG hsl2rgb(HSL_IMG img_in)
-{
+PPM_IMG hsl2rgb(HSL_IMG img_in){
     PPM_IMG result;
     
     result.w = img_in.width;
@@ -218,8 +212,7 @@ PPM_IMG hsl2rgb(HSL_IMG img_in)
 }
 
 //Convert RGB to YUV, all components in [0, 255]
-YUV_IMG rgb2yuv(PPM_IMG img_in)
-{
+YUV_IMG rgb2yuv(PPM_IMG img_in){
     YUV_IMG img_out;
     int i;//, j;
     unsigned char r, g, b;
@@ -250,8 +243,7 @@ YUV_IMG rgb2yuv(PPM_IMG img_in)
     return img_out;
 }
 
-unsigned char clip_rgb(int x)
-{
+unsigned char clip_rgb(int x){
     if(x > 255)
         return 255;
     if(x < 0)
@@ -261,8 +253,7 @@ unsigned char clip_rgb(int x)
 }
 
 //Convert YUV to RGB, all components in [0, 255]
-PPM_IMG yuv2rgb(YUV_IMG img_in)
-{
+PPM_IMG yuv2rgb(YUV_IMG img_in){
     PPM_IMG img_out;
     int  rt,gt,bt;
     int y, cb, cr;

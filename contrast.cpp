@@ -6,6 +6,7 @@
 #include <fstream>  // For file handling
 #include "hist-equ.h"
 
+
 void run_cpu_color_test(PPM_IMG img_in);
 void run_cpu_gray_test(PGM_IMG img_in);
 void save_results_to_file(double time_taken);
@@ -74,8 +75,7 @@ void save_results_to_file(double time_taken) {
     }
 }
 
-void run_cpu_color_test(PPM_IMG img_in)
-{
+void run_cpu_color_test(PPM_IMG img_in){
     PPM_IMG img_obuf_hsl, img_obuf_yuv;
     
     printf("Starting CPU processing...\n");
@@ -94,11 +94,7 @@ void run_cpu_color_test(PPM_IMG img_in)
     free_ppm(img_obuf_yuv);
 }
 
-
-
-
-void run_cpu_gray_test(PGM_IMG img_in)
-{
+void run_cpu_gray_test(PGM_IMG img_in){
     PGM_IMG img_obuf;
     
     
@@ -110,8 +106,6 @@ void run_cpu_gray_test(PGM_IMG img_in)
     write_pgm(img_obuf, "./sequential-output/out.pgm");
     free_pgm(img_obuf);
 }
-
-
 
 PPM_IMG read_ppm(const char * path){
     FILE * in_file;
@@ -175,8 +169,7 @@ void write_ppm(PPM_IMG img, const char * path){
     free(obuf);
 }
 
-void free_ppm(PPM_IMG img)
-{
+void free_ppm(PPM_IMG img){
     free(img.img_r);
     free(img.img_g);
     free(img.img_b);
@@ -220,7 +213,6 @@ void write_pgm(PGM_IMG img, const char * path){
     fclose(out_file);
 }
 
-void free_pgm(PGM_IMG img)
-{
+void free_pgm(PGM_IMG img){
     free(img.img);
 }

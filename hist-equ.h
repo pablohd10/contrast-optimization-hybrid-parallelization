@@ -33,7 +33,6 @@ typedef struct
     unsigned char * l;
 } HSL_IMG;
 
-    
 
 PPM_IMG read_ppm(const char * path);
 void write_ppm(PPM_IMG img, const char * path);
@@ -60,6 +59,5 @@ PGM_IMG contrast_enhancement_g(PGM_IMG img_in);
 PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in);
 PPM_IMG contrast_enhancement_c_yuv(PPM_IMG img_in);
 PPM_IMG contrast_enhancement_c_hsl(PPM_IMG img_in);
-
 
 #endif

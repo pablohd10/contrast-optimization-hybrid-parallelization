@@ -21,7 +21,6 @@ void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin
     }
 }
 
-
 void histogram_equalization(unsigned char * img_out, unsigned char * img_in, 
                             int * hist_in, int img_size, int nbr_bin){
     int *lut = (int *)malloc(sizeof(int)*nbr_bin);
