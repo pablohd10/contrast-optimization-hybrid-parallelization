@@ -13,7 +13,9 @@ int main(){
     PGM_IMG img_ibuf_g;
     PPM_IMG img_ibuf_c;
 
-    // Get start time using high_resolution_clock
+    MPI_Init(NULL, NULL);
+
+    // Get start time using MPI_Wtime
     double start = MPI_Wtime();
 
     printf("Running contrast enhancement for gray-scale images.\n");
@@ -31,6 +33,8 @@ int main(){
 
     // Calculate duration
     double time_taken = end - start;
+
+    MPI_Finalize();
 
     // Print the time to the console
     printf("Time taken: %f seconds\n", time_taken);

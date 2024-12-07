@@ -1,9 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <iostream>
-#include <chrono>
-#include <fstream>  // For file handling
+#include <mpi.h>
 #include <omp.h>
 #include "hist-equ.h"
 
@@ -16,9 +14,11 @@ void save_results_to_file(double time_taken, int max_threads);
 int main(){
     PGM_IMG img_ibuf_g;
     PPM_IMG img_ibuf_c;
-    
-    // Get start time using high_resolution_clock
-    auto start = std::chrono::high_resolution_clock::now();
+
+    MPI_Init(NULL, NULL);
+
+    // Get start time using MPI_Wtime
+    double start = MPI_Wtime();
 
     // NUMBER OF THREADS
     omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 12-1 = 11 threads)
@@ -37,16 +37,17 @@ int main(){
     img_ibuf_c = read_ppm("in.ppm");
     run_cpu_color_test(img_ibuf_c);
     free_ppm(img_ibuf_c);
-
+    
     // Get end time
-    auto end = std::chrono::high_resolution_clock::now();
+    double end = MPI_Wtime();
 
     // Calculate duration
-    std::chrono::duration<double> duration = end - start;
-    double time_taken = duration.count();  // Convert to seconds
+    double time_taken = end - start;
+
+    MPI_Finalize();
 
     // Print the time to the console
-    std::cout << "Time taken: " << time_taken << " seconds\n";
+    printf("Time taken: %f seconds\n", time_taken);
 
     save_results_to_file(time_taken, max_threads);
 
@@ -55,50 +56,51 @@ int main(){
 
 void save_results_to_file(double time_taken, int max_threads) {
     // Get Slurm job information
-    const char* partition = std::getenv("SLURM_JOB_PARTITION");
-    const char* nodes = std::getenv("SLURM_NNODES");
-    const char* tasks = std::getenv("SLURM_NTASKS");
+    const char* partition = getenv("SLURM_JOB_PARTITION");
+    const char* nodes = getenv("SLURM_NNODES");
+    const char* tasks = getenv("SLURM_NTASKS");
 
     // Check if running on Slurm in the 'gpus' partition
-    if (partition != nullptr && std::string(partition) == "gpus") {
-        // Open the file for appending
-        std::ofstream outfile("./omp-output/time_results.txt", std::ios_base::app);
+    if (partition != NULL && strcmp(partition, "gpus") == 0) {
+        // Open the file for appending. If it does not exist, it is created
+        FILE *outfile = fopen("./omp-output/time_results.txt", "a"); // mode "a" -> stream is positioned at the end of the file
         
         // Check if the file is open successfully
-        if (outfile.is_open()) {
-            // Check if the file is empty by checking its size
-            outfile.seekp(0, std::ios::end);
-            if (outfile.tellp() == 0) {  // If file is empty, write headers
-                outfile << "N (Nodes)\tn (Processes)\tThreads\t\tTime (seconds)\n";
+        if (outfile != NULL) {
+            if (ftell(outfile) == 0) {  // If file is empty (end of file is at position 0), write headers
+                fprintf(outfile, "N (Nodes)\tn (Processes)\tThreads\t\tTime (seconds)\n");
             }
+
+            // write results
+            fprintf(outfile, "\t%s\t\t\t%s\t\t\t\t%i\t\t%f\n", nodes ? nodes : "N/A", tasks ? tasks : "N/A", max_threads, time_taken);
             
-            // Write the values in tabular format
-            outfile << "\t" << (nodes ? nodes : "N/A") << "\t\t\t"
-                    << (tasks ? tasks : "N/A") << "\t\t\t\t"
-                    << max_threads << "\t\t"
-                    << time_taken << "\n";
-            
-            outfile.close();  // Close the file
+            // close file
+            fclose(outfile);  // Close the file
         } else {
-            std::cerr << "Error opening file for writing.\n";
+            fprintf(stderr, "Error opening file for writing.\n");
         }
     }
 }
 
 void run_cpu_color_test(PPM_IMG img_in){
     PPM_IMG img_obuf_hsl, img_obuf_yuv;
+    double tstart, tend;
     
     printf("Starting CPU processing...\n");
     
     // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (hsl and yuv). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
     // HOWEVER maybe oversubscription is produced since we will have many threads at the same time as each of these functions are also parallelized (for loops)
+    tstart = MPI_Wtime();
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
-    printf("HSL processing time: %f (ms)\n", 0.0f /* TIMER */ );
+    tend = MPI_Wtime();
+    printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
     
     write_ppm(img_obuf_hsl, "./omp-output/out_hsl.ppm");
 
+    tstart = MPI_Wtime();
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
-    printf("YUV processing time: %f (ms)\n", 0.0f /* TIMER */);
+    tend = MPI_Wtime();
+    printf("YUV processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
     
     write_ppm(img_obuf_yuv, "./omp-output/out_yuv.ppm");
     
@@ -108,12 +110,14 @@ void run_cpu_color_test(PPM_IMG img_in){
 
 void run_cpu_gray_test(PGM_IMG img_in){
     PGM_IMG img_obuf;
-    
+    double tstart, tend;    
     
     printf("Starting CPU processing...\n");
     
+    tstart = MPI_Wtime();
     img_obuf = contrast_enhancement_g(img_in);
-    printf("Processing time: %f (ms)\n", 0.0f /* TIMER */ );
+    tend = MPI_Wtime();
+    printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
     
     write_pgm(img_obuf, "./omp-output/out.pgm");
     free_pgm(img_obuf);
