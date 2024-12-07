@@ -1,0 +1,4 @@
+N (Nodes)	n (Processes)	Time (seconds)
+	1			1			61.037096
+	1			1			47.000796
+	1			1			50.851765
