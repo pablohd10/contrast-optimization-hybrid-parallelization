@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.1)
 project(
   contrast
   VERSION 1.0
-  LANGUAGES CXX)
+  LANGUAGES C)
 
 
 find_package(MPI)
@@ -17,6 +17,6 @@ endif()
 
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
-add_executable(contrast contrast-enhancement.cpp histogram-equalization.cpp contrast.cpp)
+add_executable(contrast contrast-enhancement.c histogram-equalization.c contrast-mpi.c)
 
 target_link_libraries(contrast ${MPI_C_LIBRARIES})
