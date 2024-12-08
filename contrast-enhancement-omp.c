@@ -154,7 +154,7 @@ HSL_IMG rgb2hsl(PPM_IMG img_in){
     return img_out;
 }
 
-float Hue_2_RGB( float v1, float v2, float vH )             //Function Hue_2_RGB{
+float Hue_2_RGB( float v1, float v2, float vH ) {             //Function Hue_2_RGB
     if ( vH < 0 ) vH += 1;
     if ( vH > 1 ) vH -= 1;
     if ( ( 6 * vH ) < 1 ) return ( v1 + ( v2 - v1 ) * 6 * vH );

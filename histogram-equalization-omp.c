@@ -17,7 +17,7 @@ void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin
     // Count the number of occurrences in the image for each pixel value
     #pragma omp parallel for reduction(+: hist_out[:nbr_bin]) schedule(static)// Reduction addition operation on hist_out. Iterations are evenly distibuted across threads
     for (int i = 0; i < img_size; i++) {
-        hist_out[img_in[i]]++;  // Update global histogram directly
+        hist_out[img_in[i]]++; 
     }
 }
 
