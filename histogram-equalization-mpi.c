@@ -5,96 +5,57 @@
 #include "hist-equ.h"
 
 
-// Paralelizar el cálculo y la ecualización del histograma utilizando MPI implica distribuir 
-// la carga de trabajo entre múltiples procesos, calcular histogramas locales, 
-// combinar estos histogramas para formar un histograma global, y luego aplicar la LUT resultante 
-// a cada porción de la imagen.
-
-// Función para calcular el histograma parcial y reducirlo a uno global
 void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin){
     int i;
-    int rank, size;
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    // Cada proceso MPI inicializa su propio histograma local (hist_local) a cero.
-    int *hist_local = (int*) malloc(nbr_bin * sizeof(int));
-    if (hist_local == NULL) {
-        fprintf(stderr, "Error al asignar memoria para hist_local\n");
-        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    for ( i = 0; i < nbr_bin; i ++){
+        hist_out[i] = 0;
     }
 
-    for(i = 0; i < nbr_bin; i++){
-        hist_local[i] = 0;
+    for ( i = 0; i < img_size; i ++){
+        hist_out[img_in[i]] ++;
     }
-
-    // Cada proceso recorre su porción de la imagen (img_in) y actualiza hist_local contando las ocurrencias de cada nivel de intensidad.
-    for(i = 0; i < img_size; i++){
-        hist_local[img_in[i]]++;
-    }
-
-    // Se utiliza MPI_Reduce para sumar todos los histogramas locales en un histograma global (hist_out) que solo está disponible en el proceso raíz (rank 0).
-    MPI_Reduce(hist_local, hist_out, nbr_bin, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-    free(hist_local);
 }
 
-// Función para realizar la ecualización del histograma
 void histogram_equalization(unsigned char * img_out, unsigned char * img_in, 
-                            int * hist_in, int img_size, int nbr_bin){
-    int i, cdf, min, d;
-    int rank;
+                            int * hist_in_local, int img_size_local, int nbr_bin){
+    int *lut = (int *)malloc(sizeof(int)*nbr_bin);
+    int i;
 
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    int *lut = NULL;
-
-    if(rank == 0){
-        // Solo el proceso raíz (rank 0) calcula la LUT utilizando el histograma global (hist_in).
-        lut = (int *)malloc(sizeof(int)*nbr_bin);
-        if (lut == NULL) {
-            fprintf(stderr, "Error al asignar memoria para LUT\n");
-            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-        }
-
-        // Se calcula la CDF (Función de Distribución Acumulativa) y se construye la LUT basada en esta.
+    int hist_in[nbr_bin];
+    int img_size, mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Reduce(hist_in_local, hist_in, nbr_bin, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&img_size_local, &img_size, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (mpi_rank == 0) {
+        int cdf, min, d;
+        /* Construct the LUT by calculating the CDF */
         cdf = 0;
         min = 0;
         i = 0;
-        while(min == 0 && i < nbr_bin){
+        while(min == 0){
             min = hist_in[i++];
         }
         d = img_size - min;
-
-        for(i = 0; i < nbr_bin; i++){
+        for(i = 0; i < nbr_bin; i ++){
             cdf += hist_in[i];
+            //lut[i] = (cdf - min)*(nbr_bin - 1)/d;
             lut[i] = (int)(((float)cdf - min)*255/d + 0.5);
             if(lut[i] < 0){
                 lut[i] = 0;
             }
         }
     }
-
-    // La LUT calculada en el proceso raíz se difunde a todos los demás procesos utilizando MPI_Bcast.
-    if(rank != 0){
-        lut = (int *)malloc(sizeof(int)*nbr_bin);
-        if (lut == NULL) {
-            fprintf(stderr, "Error al asignar memoria para LUT en proceso %d\n", rank);
-            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-        }
-    }
-
     MPI_Bcast(lut, nbr_bin, MPI_INT, 0, MPI_COMM_WORLD);
-
-    // Cada proceso aplica la LUT a su porción local de la imagen (img_in) para generar la imagen ecualizada local (img_out).
-    for(i = 0; i < img_size; i++){
+    
+    /* Get the result image */
+    for(i = 0; i < img_size_local; i ++){
         if(lut[img_in[i]] > 255){
             img_out[i] = 255;
         }
         else{
             img_out[i] = (unsigned char)lut[img_in[i]];
         }
+        
     }
 
     free(lut);

@@ -120,64 +120,115 @@ void run_cpu_gray_test(PGM_IMG img_in)
 
 
 PPM_IMG read_ppm(const char * path){
-    FILE * in_file;
-    char sbuf[256];
-    
+    int mpi_rank, mpi_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
     char *ibuf;
-    PPM_IMG result;
-    int v_max, i;
-    in_file = fopen(path, "r");
-    if (in_file == NULL){
-        printf("Input file not found!\n");
-        exit(1);
+    int i, total_w, total_h;
+    if (mpi_rank == 0) {
+        FILE * in_file;
+        char sbuf[256];
+        int v_max;
+
+        in_file = fopen(path, "r");
+        if (in_file != NULL){
+            /*Skip the magic number*/
+            fscanf(in_file, "%s", sbuf);
+
+            //result = malloc(sizeof(PPM_IMG));
+            fscanf(in_file, "%d",&total_w);
+            fscanf(in_file, "%d",&total_h);
+            fscanf(in_file, "%d\n",&v_max);
+            printf("Image size: %d x %d\n", total_w, total_h);
+            
+            ibuf = (char *)malloc(3 * total_w * total_h * sizeof(char));
+            fread(ibuf,sizeof(unsigned char), 3 * total_w * total_h, in_file);
+            fclose(in_file);
+        }
+        else {
+            printf("Input file not found!\n");
+            total_h = 0;
+        }
     }
-    /*Skip the magic number*/
-    fscanf(in_file, "%s", sbuf);
-
-
-    //result = malloc(sizeof(PPM_IMG));
-    fscanf(in_file, "%d",&result.w);
-    fscanf(in_file, "%d",&result.h);
-    fscanf(in_file, "%d\n",&v_max);
-    printf("Image size: %d x %d\n", result.w, result.h);
+    MPI_Bcast(&total_h, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&total_w, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (total_h == 0) exit(1);
     
+    PPM_IMG result;
+    result.w = total_w;
+    result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
+
+    if (mpi_rank == 0) {
+        ibuf += 3 * result.w * result.h;
+        int result_h;
+        for (i = 1; i < mpi_size; i++) {
+            result_h = (total_h + i) / mpi_size;
+            MPI_Send(ibuf, 3 * result.w * result_h, MPI_CHAR, i, 1, MPI_COMM_WORLD);
+            ibuf += 3 * result.w * result_h;
+        }
+        ibuf -= 3 * result.w * total_h;
+    }
+    else {
+        ibuf = (char *)malloc(3 * result.w * result.h * sizeof(char));
+        MPI_Recv(ibuf, 3 * result.w * result.h, MPI_CHAR, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
 
     result.img_r = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
-    ibuf         = (char *)malloc(3 * result.w * result.h * sizeof(char));
-
-    
-    fread(ibuf,sizeof(unsigned char), 3 * result.w*result.h, in_file);
-
     for(i = 0; i < result.w*result.h; i ++){
         result.img_r[i] = ibuf[3*i + 0];
         result.img_g[i] = ibuf[3*i + 1];
         result.img_b[i] = ibuf[3*i + 2];
     }
     
-    fclose(in_file);
     free(ibuf);
-    
     return result;
 }
 
 void write_ppm(PPM_IMG img, const char * path){
-    FILE * out_file;
-    int i;
+    int mpi_rank, mpi_size, total_h, i;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    MPI_Reduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     
-    char * obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
-
+    char * obuf;
+    if (mpi_rank == 0) {
+        obuf = (char *)malloc(3 * img.w * total_h * sizeof(char));
+    }
+    else {
+        obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
+    }
+    
     for(i = 0; i < img.w*img.h; i ++){
         obuf[3*i + 0] = img.img_r[i];
         obuf[3*i + 1] = img.img_g[i];
         obuf[3*i + 2] = img.img_b[i];
     }
-    out_file = fopen(path, "wb");
-    fprintf(out_file, "P6\n");
-    fprintf(out_file, "%d %d\n255\n",img.w, img.h);
-    fwrite(obuf,sizeof(unsigned char), 3*img.w*img.h, out_file);
-    fclose(out_file);
+
+    if (mpi_rank != 0) {
+        MPI_Send(obuf, 3 * img.w * img.h, MPI_CHAR, 0, 100, MPI_COMM_WORLD);
+    }
+    else {
+        obuf += 3 * img.w * img.h;
+
+        int img_h;
+        for (i = 1; i < mpi_size; i++) {
+            img_h = (total_h + i) / mpi_size;
+            MPI_Recv(obuf, 3 * img.w * img_h, MPI_CHAR, i, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            obuf += 3 * img.w * img_h;
+        }
+        obuf -= 3 * img.w * total_h;
+
+        FILE * out_file;
+        out_file = fopen(path, "wb");
+        fprintf(out_file, "P6\n");
+        fprintf(out_file, "%d %d\n255\n",img.w, total_h);
+        fwrite(obuf,sizeof(unsigned char), 3*img.w*total_h, out_file);
+        fclose(out_file);
+    }
+
     free(obuf);
 }
 
@@ -189,41 +240,97 @@ void free_ppm(PPM_IMG img)
 }
 
 PGM_IMG read_pgm(const char * path){
-    FILE * in_file;
-    char sbuf[256];
+    int mpi_rank, mpi_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     
+    char *ibuf;
+    int i, total_w, total_h;
+    if (mpi_rank == 0) {
+        FILE * in_file;
+        char sbuf[256];
+        int v_max;
+
+        in_file = fopen(path, "r");
+        if (in_file != NULL){
+            fscanf(in_file, "%s", sbuf); /*Skip the magic number*/
+            fscanf(in_file, "%d",&total_w);
+            fscanf(in_file, "%d",&total_h);
+            fscanf(in_file, "%d\n",&v_max);
+            printf("Image size: %d x %d\n", total_w, total_h);
+
+            ibuf = (char *)malloc(total_w * total_h * sizeof(char));
+            fread(ibuf,sizeof(unsigned char), total_w * total_h, in_file);
+            fclose(in_file);
+        }
+        else {
+            printf("Input file not found!\n");
+            total_h = 0;
+        }
+    }
+    MPI_Bcast(&total_h, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&total_w, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (total_h == 0) exit(1);
     
     PGM_IMG result;
-    int v_max;//, i;
-    in_file = fopen(path, "r");
-    if (in_file == NULL){
-        printf("Input file not found!\n");
-        exit(1);
-    }
-    
-    fscanf(in_file, "%s", sbuf); /*Skip the magic number*/
-    fscanf(in_file, "%d",&result.w);
-    fscanf(in_file, "%d",&result.h);
-    fscanf(in_file, "%d\n",&v_max);
-    printf("Image size: %d x %d\n", result.w, result.h);
-    
-
+    result.w = total_w;
+    result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
     result.img = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
 
-        
-    fread(result.img,sizeof(unsigned char), result.w*result.h, in_file);    
-    fclose(in_file);
+    if (mpi_rank == 0) {
+        for (i = 0; i < result.w * result.h; i++) {
+            result.img[i] = ibuf[i];
+        }
+        ibuf += result.w * result.h;
+
+        int result_h;
+        for (i = 1; i < mpi_size; i++) {
+            result_h = (total_h + i) / mpi_size;
+            MPI_Send(ibuf, result.w * result_h, MPI_CHAR, i, 0, MPI_COMM_WORLD);
+            ibuf += result.w * result_h;
+        }
+        ibuf -= result.w * total_h;
+    }
+    else {
+        MPI_Recv(result.img, result.w * result.h, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
     
+    if (mpi_rank == 0) free(ibuf);
     return result;
 }
 
 void write_pgm(PGM_IMG img, const char * path){
-    FILE * out_file;
-    out_file = fopen(path, "wb");
-    fprintf(out_file, "P5\n");
-    fprintf(out_file, "%d %d\n255\n",img.w, img.h);
-    fwrite(img.img,sizeof(unsigned char), img.w*img.h, out_file);
-    fclose(out_file);
+    int mpi_rank, mpi_size, total_h, i;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    MPI_Reduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (mpi_rank != 0) {
+        MPI_Send(img.img, img.w * img.h, MPI_CHAR, 0, 99, MPI_COMM_WORLD);
+    }
+    else {
+        char * obuf = (char *)malloc(img.w * total_h * sizeof(char));
+
+        for (i = 0; i < img.w * img.h; i++) {
+            obuf[i] = img.img[i];
+        }
+        obuf += img.w * img.h;
+
+        int img_h;
+        for (i = 1; i < mpi_size; i++) {
+            img_h = (total_h + i) / mpi_size;
+            MPI_Recv(obuf, img.w * img_h, MPI_CHAR, i, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            obuf += img.w * img_h;
+        }
+        obuf -= img.w * total_h;
+
+        FILE * out_file;
+        out_file = fopen(path, "wb");
+        fprintf(out_file, "P5\n");
+        fprintf(out_file, "%d %d\n255\n",img.w, img.h);
+        fwrite(img.img,sizeof(unsigned char), img.w*img.h, out_file);
+        fclose(out_file);
+    }
 }
 
 void free_pgm(PGM_IMG img)
