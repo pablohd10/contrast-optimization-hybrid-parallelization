@@ -15,8 +15,7 @@ int main(){
 
     MPI_Init(NULL, NULL);
 
-    // Get start time using MPI_Wtime
-    double start = MPI_Wtime();
+    double start = MPI_Wtime(); // Get start time
 
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
@@ -28,23 +27,24 @@ int main(){
     run_cpu_color_test(img_ibuf_c);
     free_ppm(img_ibuf_c);
     
-    // Get end time
-    double end = MPI_Wtime();
-
-    // Calculate duration
-    double time_taken = end - start;
+    double end = MPI_Wtime(); // Get end time
+    double time_taken = end - start; // Calculate duration
+    printf("Time taken: %f seconds\n", time_taken); // Print the time to the console
+    save_results_to_file(time_taken);
 
     MPI_Finalize();
-
-    // Print the time to the console
-    printf("Time taken: %f seconds\n", time_taken);
-
-    save_results_to_file(time_taken);
 
     return 0;
 }
 
-void save_results_to_file(double time_taken) {
+void save_results_to_file(double time_taken_local) {
+    double time_taken;
+    MPI_Reduce(&time_taken_local, &time_taken, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    
+    int mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    if (mpi_rank != 0) return;
+
     // Get Slurm job information
     const char* partition = getenv("SLURM_JOB_PARTITION");
     const char* nodes = getenv("SLURM_NNODES");
