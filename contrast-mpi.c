@@ -4,146 +4,47 @@
 #include <mpi.h>
 #include "hist-equ.h"
 
-#define MASTER 0
-
-void run_cpu_color_test(PPM_IMG img_in, int local_height_c, int total_height_c, int total_width_c, int *chunk_heights_c, int *displacements_c);
-void run_cpu_gray_test(PGM_IMG img_in, int local_height_c, int total_height_g, int total_width_c, int *chunk_heights_c, int *displacements_c);
-
-// Auxiliary functions
+void run_cpu_color_test(PPM_IMG img_in);
+void run_cpu_gray_test(PGM_IMG img_in);
 void save_results_to_file(double time_taken);
-void calculate_chunk_height(int num_procesos, int total_height, int *chunk_heights, int *row_displacements);
+
 
 int main(){
+    PGM_IMG img_ibuf_g;
+    PPM_IMG img_ibuf_c;
 
     MPI_Init(NULL, NULL);
 
-    PGM_IMG img_ibuf_g, local_img_g;
-    PPM_IMG img_ibuf_c, local_img_c;
-
-    int total_width_g, total_width_c, total_height_g, total_height_c;
-
-    double start;
-
-    // Obtain information about the process it is being executed and the total number of processes
-    int num_procesos, rank, len_node_name;
-    char node_name[MPI_MAX_PROCESSOR_NAME];
-
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procesos);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Get_processor_name(node_name, &len_node_name);
-
-    // Varables for chunking
-    int *chunk_heights_g, *displacements_g, *chunk_heights_c, *displacements_c;
-
-    // Only the MASTER process reads the images. MAYBE WE CAN DO THAT 1 PROCESS READS PGM AND ANOTHER THE PPM IN PARALLEL
-    if (rank == MASTER){
-
-        // Get start time using MPI_Wtime
-        start = MPI_Wtime();
-
-        printf("MASTER process (%d) reading pgm image.\n", rank);
-        img_ibuf_g = read_pgm("in.pgm");
-        total_width_g = img_ibuf_g.w;
-        total_height_g = img_ibuf_g.h;
-        
-        printf("MASTER process (%d) reading ppm image.\n", rank);
-        img_ibuf_c = read_ppm("in.ppm");
-        total_width_c = img_ibuf_c.w;
-        total_height_c = img_ibuf_c.h;
-
-        // Calculate the height of each chunk and what the position at which it starts
-        chunk_heights_g = (int *) malloc(num_procesos * sizeof(int));
-        displacements_g = (int *) malloc(num_procesos * sizeof(int));
-        chunk_heights_c = (int *) malloc(num_procesos * sizeof(int));
-        displacements_c = (int *) malloc(num_procesos * sizeof(int));
-        calculate_chunk_height(num_procesos, total_height_g, chunk_heights_g, displacements_g);
-        calculate_chunk_height(num_procesos, total_height_c, chunk_heights_c, displacements_c);
-    }
-
-    // Broadcast image width and height
-    MPI_Bcast(&total_width_g, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&total_width_c, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&total_height_g, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&total_height_c, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-
-    int local_height_g, local_height_c;
-    // Scatter chunk heights
-    MPI_Scatter(chunk_heights_g, 1, MPI_INT, &local_height_g, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Scatter(chunk_heights_c, 1, MPI_INT, &local_height_c, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-
-    // Allocate space for local PGM_IMG
-    local_img_g.w = total_width_g;
-    local_img_g.h = local_height_g;
-    local_img_g.img = (unsigned char *)malloc(local_height_g * total_width_g * sizeof(unsigned char));
-    // Allocate space for local PPM_IMG
-    local_img_c.w = total_width_c;
-    local_img_c.h = local_height_c;
-    local_img_c.img_r = (unsigned char *)malloc(local_height_c * total_width_c * sizeof(unsigned char));
-    local_img_c.img_g = (unsigned char *)malloc(local_height_c * total_width_c * sizeof(unsigned char));
-    local_img_c.img_b = (unsigned char *)malloc(local_height_c * total_width_c * sizeof(unsigned char));
-
-    // Scatter gray image rows
-    MPI_Scatterv(img_ibuf_g.img, chunk_heights_g, displacements_g, MPI_UNSIGNED_CHAR,
-                 local_img_g.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-    // Scatter rgb image rows
-    MPI_Scatterv(img_ibuf_c.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                 local_img_c.img_r, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-    MPI_Scatterv(img_ibuf_c.img_g, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                 local_img_c.img_g, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-    MPI_Scatterv(img_ibuf_c.img_b, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                 local_img_c.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-                 
-    // Barrier to ensure that all processes have received their corresponding chunk
-    MPI_Barrier(MPI_COMM_WORLD);
+    double start = MPI_Wtime(); // Get start time
 
     printf("Running contrast enhancement for gray-scale images.\n");
-    run_cpu_gray_test(local_img_g, local_height_g, total_height_g, total_width_g, chunk_heights_g, displacements_g);
-    free_pgm(local_img_g);
+    img_ibuf_g = read_pgm("in.pgm");
+    run_cpu_gray_test(img_ibuf_g);
+    free_pgm(img_ibuf_g);
     
     printf("Running contrast enhancement for color images.\n");
-    run_cpu_color_test(local_img_c, local_height_c, total_height_c, total_width_c, chunk_heights_c, displacements_c);
-    free_ppm(local_img_c);
+    img_ibuf_c = read_ppm("in.ppm");
+    run_cpu_color_test(img_ibuf_c);
+    free_ppm(img_ibuf_c);
     
-    if (rank == MASTER){
-        // Get end time
-        double end = MPI_Wtime();
-        // Calculate duration
-        double time_taken = end - start;
-        printf("Time taken: %f seconds\n", time_taken);
-        save_results_to_file(time_taken);
-
-        free_pgm(img_ibuf_g);
-        free_ppm(img_ibuf_c);
-    }
+    double end = MPI_Wtime(); // Get end time
+    double time_taken = end - start; // Calculate duration
+    printf("Time taken: %f seconds\n", time_taken); // Print the time to the console
+    save_results_to_file(time_taken);
 
     MPI_Finalize();
 
     return 0;
 }
 
-void calculate_chunk_height(int num_procesos, int total_height, int *chunk_heights, int *row_displacements) {
-    int base_height = total_height / num_procesos;
-    int remainder = total_height % num_procesos;
+void save_results_to_file(double time_taken_local) {
+    double time_taken;
+    MPI_Reduce(&time_taken_local, &time_taken, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    
+    int mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    if (mpi_rank != 0) return;
 
-    int offset = 0;
-
-    for (int i = 0; i < num_procesos; i++) {
-        // Distribute the extra rows (remainder) among the first processes
-        chunk_heights[i] = base_height + (i < remainder ? 1 : 0);
-
-        // Calculate the starting row for each process
-        row_displacements[i] = offset;
-
-        // Update offset to point to the next process's starting row
-        offset += chunk_heights[i];
-    }
-}
-
-void save_results_to_file(double time_taken) {
     // Get Slurm job information
     const char* partition = getenv("SLURM_JOB_PARTITION");
     const char* nodes = getenv("SLURM_NNODES");
@@ -171,175 +72,163 @@ void save_results_to_file(double time_taken) {
     }
 }
 
-void run_cpu_color_test(PPM_IMG img_in, int local_height_c, int total_height_c, int total_width_c, int *chunk_heights_c, int *displacements_c) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    PPM_IMG img_obuf_hsl, img_obuf_yuv, img_obuf_final_hsl, img_obuf_final_yuv;
+void run_cpu_color_test(PPM_IMG img_in)
+{
+    PPM_IMG img_obuf_hsl, img_obuf_yuv;
     double tstart, tend;
     
     printf("Starting CPU processing...\n");
 
-     // Allocate memory for the full image (MASTER process)
-    if (rank == MASTER) {
-        img_obuf_final_hsl.img_r = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_hsl.img_g = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_hsl.img_b = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-
-        img_obuf_final_yuv.img_r = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_yuv.img_g = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_yuv.img_b = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-    }
-
-    // Start processing HSL
     tstart = MPI_Wtime();
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     tend = MPI_Wtime();
-    printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
+    printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
     
-    // Barrier to ensure that all processes have computed their local operations
-    MPI_Barrier(MPI_COMM_WORLD);
-    // Gather processed HSL image back to MASTER
-    MPI_Gatherv(img_obuf_hsl.img_r, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_hsl.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_hsl.img_g, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_hsl.img_g, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_hsl.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_hsl.img_b, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
+    write_ppm(img_obuf_hsl, "./mpi-output/out_hsl.ppm");
 
-
-    // After gathering, MASTER saves the image
-    if (rank == MASTER) {
-        write_ppm(img_obuf_hsl, "./mpi-output/out_hsl.ppm");
-    }
-
-    // Process YUV
     tstart = MPI_Wtime();
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
     tend = MPI_Wtime();
     printf("YUV processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
     
-    // Barrier to ensure that all processes have computed their local operations
-    MPI_Barrier(MPI_COMM_WORLD);
-    // Gather processed YUV image back to MASTER
-    MPI_Gatherv(img_obuf_yuv.img_r, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_yuv.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_yuv.img_g, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_yuv.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_yuv.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_yuv.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
-
-    // After gathering, MASTER saves the image
-    if (rank == MASTER) {
-        write_ppm(img_obuf_final_yuv, "./mpi-output/out_yuv.ppm");
-        free_ppm(img_obuf_final_hsl);
-        free_ppm(img_obuf_final_yuv);
-    }
+    write_ppm(img_obuf_yuv, "./mpi-output/out_yuv.ppm");
+    
     free_ppm(img_obuf_hsl);
     free_ppm(img_obuf_yuv);
 }
 
-void run_cpu_gray_test(PGM_IMG img_in, int local_height_g, int total_height_g, int total_width_g, int *chunk_heights_g, int *displacements_g) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    PGM_IMG img_obuf, img_obuf_final;
+
+
+void run_cpu_gray_test(PGM_IMG img_in)
+{
+    PGM_IMG img_obuf;
     double tstart, tend;
     
+    
     printf("Starting CPU processing...\n");
-     // Allocate memory for the full image (MASTER process)
-    if (rank == MASTER) {
-        img_obuf_final.img = (unsigned char *)malloc(total_height_g * total_width_g * sizeof(unsigned char));
-    }
-
-    // Start processing grayscale image
+    
     tstart = MPI_Wtime();
     img_obuf = contrast_enhancement_g(img_in);
     tend = MPI_Wtime();
-    printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
-
-    // Barrier to ensure that all processes have computed their local operations
-    MPI_Barrier(MPI_COMM_WORLD);
-    // Gather processed grayscale image back to MASTER
-    MPI_Gatherv(img_obuf.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
-                img_obuf_final.img, chunk_heights_g, displacements_g, MPI_UNSIGNED_CHAR,
-                MASTER, MPI_COMM_WORLD);
-
-    // After gathering, MASTER saves the image
-    if (rank == MASTER) {
-        write_pgm(img_obuf, "./mpi-output/out.pgm");
-        free_pgm(img_obuf_final);
-    }
-
+    printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
+    
+    write_pgm(img_obuf, "./mpi-output/out.pgm");
     free_pgm(img_obuf);
 }
 
 
+
 PPM_IMG read_ppm(const char * path){
-    FILE * in_file;
-    char sbuf[256];
-    
+    int mpi_rank, mpi_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
     char *ibuf;
-    PPM_IMG result;
-    int v_max, i;
-    in_file = fopen(path, "r");
-    if (in_file == NULL){
-        printf("Input file not found!\n");
-        exit(1);
+    int i, total_w, total_h;
+    if (mpi_rank == 0) {
+        FILE * in_file;
+        char sbuf[256];
+        int v_max;
+
+        in_file = fopen(path, "r");
+        if (in_file != NULL){
+            /*Skip the magic number*/
+            fscanf(in_file, "%s", sbuf);
+
+            //result = malloc(sizeof(PPM_IMG));
+            fscanf(in_file, "%d",&total_w);
+            fscanf(in_file, "%d",&total_h);
+            fscanf(in_file, "%d\n",&v_max);
+            printf("Image size: %d x %d\n", total_w, total_h);
+            
+            ibuf = (char *)malloc(3 * total_w * total_h * sizeof(char));
+            fread(ibuf,sizeof(unsigned char), 3 * total_w * total_h, in_file);
+            fclose(in_file);
+        }
+        else {
+            printf("Input file not found!\n");
+            total_h = 0;
+        }
     }
-    /*Skip the magic number*/
-    fscanf(in_file, "%s", sbuf);
-
-
-    //result = malloc(sizeof(PPM_IMG));
-    fscanf(in_file, "%d",&result.w);
-    fscanf(in_file, "%d",&result.h);
-    fscanf(in_file, "%d\n",&v_max);
-    printf("Image size: %d x %d\n", result.w, result.h);
+    MPI_Bcast(&total_h, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&total_w, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (total_h == 0) exit(1);
     
+    PPM_IMG result;
+    result.w = total_w;
+    result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
+
+    if (mpi_rank == 0) {
+        ibuf += 3 * result.w * result.h;
+        int result_h;
+        for (i = 1; i < mpi_size; i++) {
+            result_h = (total_h + i) / mpi_size;
+            MPI_Send(ibuf, 3 * result.w * result_h, MPI_CHAR, i, 1, MPI_COMM_WORLD);
+            ibuf += 3 * result.w * result_h;
+        }
+        ibuf -= 3 * result.w * total_h;
+    }
+    else {
+        ibuf = (char *)malloc(3 * result.w * result.h * sizeof(char));
+        MPI_Recv(ibuf, 3 * result.w * result.h, MPI_CHAR, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
 
     result.img_r = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
-    ibuf         = (char *)malloc(3 * result.w * result.h * sizeof(char));
-
-    
-    fread(ibuf,sizeof(unsigned char), 3 * result.w*result.h, in_file);
-
     for(i = 0; i < result.w*result.h; i ++){
         result.img_r[i] = ibuf[3*i + 0];
         result.img_g[i] = ibuf[3*i + 1];
         result.img_b[i] = ibuf[3*i + 2];
     }
     
-    fclose(in_file);
     free(ibuf);
-    
     return result;
 }
 
 void write_ppm(PPM_IMG img, const char * path){
-    FILE * out_file;
-    int i;
+    int mpi_rank, mpi_size, total_h, i;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    MPI_Reduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     
-    char * obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
-
+    char * obuf;
+    if (mpi_rank == 0) {
+        obuf = (char *)malloc(3 * img.w * total_h * sizeof(char));
+    }
+    else {
+        obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
+    }
+    
     for(i = 0; i < img.w*img.h; i ++){
         obuf[3*i + 0] = img.img_r[i];
         obuf[3*i + 1] = img.img_g[i];
         obuf[3*i + 2] = img.img_b[i];
     }
-    out_file = fopen(path, "wb");
-    fprintf(out_file, "P6\n");
-    fprintf(out_file, "%d %d\n255\n",img.w, img.h);
-    fwrite(obuf,sizeof(unsigned char), 3*img.w*img.h, out_file);
-    fclose(out_file);
+
+    if (mpi_rank != 0) {
+        MPI_Send(obuf, 3 * img.w * img.h, MPI_CHAR, 0, 100, MPI_COMM_WORLD);
+    }
+    else {
+        obuf += 3 * img.w * img.h;
+
+        int img_h;
+        for (i = 1; i < mpi_size; i++) {
+            img_h = (total_h + i) / mpi_size;
+            MPI_Recv(obuf, 3 * img.w * img_h, MPI_CHAR, i, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            obuf += 3 * img.w * img_h;
+        }
+        obuf -= 3 * img.w * total_h;
+
+        FILE * out_file;
+        out_file = fopen(path, "wb");
+        fprintf(out_file, "P6\n");
+        fprintf(out_file, "%d %d\n255\n",img.w, total_h);
+        fwrite(obuf,sizeof(unsigned char), 3*img.w*total_h, out_file);
+        fclose(out_file);
+    }
+
     free(obuf);
 }
 
@@ -351,41 +240,112 @@ void free_ppm(PPM_IMG img)
 }
 
 PGM_IMG read_pgm(const char * path){
-    FILE * in_file;
-    char sbuf[256];
+    int mpi_rank, mpi_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     
-    
-    PGM_IMG result;
-    int v_max;//, i;
-    in_file = fopen(path, "r");
-    if (in_file == NULL){
-        printf("Input file not found!\n");
-        exit(1);
-    }
-    
-    fscanf(in_file, "%s", sbuf); /*Skip the magic number*/
-    fscanf(in_file, "%d",&result.w);
-    fscanf(in_file, "%d",&result.h);
-    fscanf(in_file, "%d\n",&v_max);
-    printf("Image size: %d x %d\n", result.w, result.h);
-    
+    char *ibuf;
+    int i, total_w, total_h;
+    if (!mpi_rank) {
+        FILE * in_file;
+        char sbuf[256];
+        int v_max;
 
+        in_file = fopen(path, "r");
+        if (in_file != NULL){
+            fscanf(in_file, "%s", sbuf); /*Skip the magic number*/
+            fscanf(in_file, "%d",&total_w);
+            fscanf(in_file, "%d",&total_h);
+            fscanf(in_file, "%d\n",&v_max);
+            printf("Image size: %d x %d\n", total_w, total_h);
+
+            ibuf = (unsigned char *)malloc(total_w * total_h * sizeof(unsigned char));
+            fread(ibuf,sizeof(unsigned char), total_w * total_h, in_file);
+            fclose(in_file);
+        }
+        else {
+            printf("Input file not found!\n");
+            total_h = 0;
+        }
+    }
+	
+	// Broadcast de las dimensiones de la imagen
+    MPI_Bcast(&total_h, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&total_w, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    
+	// Si no se ha leído la imagen -> salimos code error 1
+	if (!total_h) exit(1);
+    
+	// Calculo de variables locales para cada proceso
+	int *pixels_per_process = NULL;
+    int *pixels_per_process = NULL;
+
+    if (!mpi_rank) {
+        pixels_per_process = (int*)malloc(mpi_size * sizeof(int));
+        processes_offsets = (int*)malloc(mpi_size * sizeof(int));
+        
+        int offset = 0;
+        for (int i = 0; i < mpi_size; i++) {
+            int local_h = (total_h + i) / mpi_size;		// asignacion variable pero equitativa
+            pixels_per_process[i] = local_h * total_w; 	// total de pixeles para ese proceso
+            processes_offsets[i] = offset;
+            offset += pixels_per_process[i];
+        }
+    }
+	
+	// Creación de la variable imagen resultante -> asignación de algunas de las variables
+    PGM_IMG result;
+    result.w = total_w;
+    result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
     result.img = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
 
-        
-    fread(result.img,sizeof(unsigned char), result.w*result.h, in_file);    
-    fclose(in_file);
-    
+	// Scatter_V
+	// Se mandan los arrays con los distintos offsets y pixeles que le corresponden a cada proceso
+	MPI_Scatterv(ibuf, pixels_per_process, processes_offsets, MPI_UNSIGNED_CHAR,
+                 result.img, result.w * result.h, MPI_UNSIGNED_CHAR,
+                 0, MPI_COMM_WORLD);
+
+	// Free memory
+    if (!mpi_rank){
+		free(ibuf);
+		free(pixels_per_process);
+		free(processes_offsets);
+	}
     return result;
 }
 
 void write_pgm(PGM_IMG img, const char * path){
-    FILE * out_file;
-    out_file = fopen(path, "wb");
-    fprintf(out_file, "P5\n");
-    fprintf(out_file, "%d %d\n255\n",img.w, img.h);
-    fwrite(img.img,sizeof(unsigned char), img.w*img.h, out_file);
-    fclose(out_file);
+    int mpi_rank, mpi_size, total_h, i;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    MPI_Reduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (mpi_rank != 0) {
+        MPI_Send(img.img, img.w * img.h, MPI_CHAR, 0, 99, MPI_COMM_WORLD);
+    }
+    else {
+        char * obuf = (char *)malloc(img.w * total_h * sizeof(char));
+
+        for (i = 0; i < img.w * img.h; i++) {
+            obuf[i] = img.img[i];
+        }
+        obuf += img.w * img.h;
+
+        int img_h;
+        for (i = 1; i < mpi_size; i++) {
+            img_h = (total_h + i) / mpi_size;
+            MPI_Recv(obuf, img.w * img_h, MPI_CHAR, i, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            obuf += img.w * img_h;
+        }
+        obuf -= img.w * total_h;
+
+        FILE * out_file;
+        out_file = fopen(path, "wb");
+        fprintf(out_file, "P5\n");
+        fprintf(out_file, "%d %d\n255\n",img.w, total_h);
+        fwrite(obuf,sizeof(unsigned char), img.w*total_h, out_file);
+        fclose(out_file);
+    }
 }
 
 void free_pgm(PGM_IMG img)
