@@ -127,17 +127,15 @@ void calculate_chunk_height(int num_procesos, int total_height, int *chunk_heigh
     int remainder = total_height % num_procesos;
 
     int offset = 0;
+	
+	// Calculate n of rows for each process -> local height AKA chunks height
+	for (int i = 0; i < num_procesos; i++) {
+		chunk_heights[i] = base_height;			// Minimum height/number of rows for each process
+		if (i < remainder) chunk_heights[i]++;	// Distribute the extra rows (remainder) among the first processes
+		row_displacements[i] = offset;			// Calculate the starting row for each process
+		offset += chunk_heights[i];				// Update offset to point to the next process's starting row
+	}
 
-    for (int i = 0; i < num_procesos; i++) {
-        // Distribute the extra rows (remainder) among the first processes
-        chunk_heights[i] = base_height + (i < remainder ? 1 : 0);
-
-        // Calculate the starting row for each process
-        row_displacements[i] = offset;
-
-        // Update offset to point to the next process's starting row
-        offset += chunk_heights[i];
-    }
 }
 
 void save_results_to_file(double time_taken) {
