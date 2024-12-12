@@ -159,31 +159,29 @@ PPM_IMG read_ppm(const char * path){
     result.w = total_w;
     result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
 
-    if (mpi_rank == 0) {
-        ibuf += 3 * result.w * result.h;
-        int result_h;
-        for (i = 1; i < mpi_size; i++) {
-            result_h = (total_h + i) / mpi_size;
-            MPI_Send(ibuf, 3 * result.w * result_h, MPI_CHAR, i, 1, MPI_COMM_WORLD);
-            ibuf += 3 * result.w * result_h;
-        }
-        ibuf -= 3 * result.w * total_h;
+    char * receivebuf;
+    receivebuf = (char *)malloc(3 * result.w * result.h * sizeof(char));
+
+    int sendcnts[mpi_size], displs[mpi_size];
+    displs[0] = 0;
+    for (i = 0; i < mpi_size; i++) {
+        sendcnts[i] = 3 * ((total_h + i) / mpi_size) * total_w;
+        if (i < mpi_size - 1) displs[i + 1] = displs[i] + sendcnts[i];
     }
-    else {
-        ibuf = (char *)malloc(3 * result.w * result.h * sizeof(char));
-        MPI_Recv(ibuf, 3 * result.w * result.h, MPI_CHAR, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
+
+    MPI_Scatterv(ibuf, sendcnts, displs, MPI_UNSIGNED_CHAR, receivebuf, 3 * result.w * result.h, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
     result.img_r = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     for(i = 0; i < result.w*result.h; i ++){
-        result.img_r[i] = ibuf[3*i + 0];
-        result.img_g[i] = ibuf[3*i + 1];
-        result.img_b[i] = ibuf[3*i + 2];
+        result.img_r[i] = receivebuf[3*i + 0];
+        result.img_g[i] = receivebuf[3*i + 1];
+        result.img_b[i] = receivebuf[3*i + 2];
     }
     
-    free(ibuf);
+    free(receivebuf);
+    if (mpi_rank == 0) free(ibuf);
     return result;
 }
 
@@ -191,45 +189,38 @@ void write_ppm(PPM_IMG img, const char * path){
     int mpi_rank, mpi_size, total_h, i;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    MPI_Reduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Allreduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     
-    char * obuf;
-    if (mpi_rank == 0) {
-        obuf = (char *)malloc(3 * img.w * total_h * sizeof(char));
-    }
-    else {
-        obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
-    }
-    
+    char * sendbuf;
+    sendbuf = (char *)malloc(3 * img.w * img.h * sizeof(char));    
     for(i = 0; i < img.w*img.h; i ++){
-        obuf[3*i + 0] = img.img_r[i];
-        obuf[3*i + 1] = img.img_g[i];
-        obuf[3*i + 2] = img.img_b[i];
+        sendbuf[3*i + 0] = img.img_r[i];
+        sendbuf[3*i + 1] = img.img_g[i];
+        sendbuf[3*i + 2] = img.img_b[i];
     }
 
-    if (mpi_rank != 0) {
-        MPI_Send(obuf, 3 * img.w * img.h, MPI_CHAR, 0, 100, MPI_COMM_WORLD);
+    char * obuf;
+    if (mpi_rank == 0) obuf = (char *)malloc(3 * img.w * total_h * sizeof(char));
+
+    int recvcnts[mpi_size], displs[mpi_size];
+    displs[0] = 0;
+    for (i = 0; i < mpi_size; i++) {
+        recvcnts[i] = 3 * ((total_h + i) / mpi_size) * img.w;
+        if (i < mpi_size - 1) displs[i + 1] = displs[i] + recvcnts[i];
     }
-    else {
-        obuf += 3 * img.w * img.h;
+    MPI_Gatherv(sendbuf, 3 * img.w * img.h, MPI_UNSIGNED_CHAR, obuf, recvcnts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 
-        int img_h;
-        for (i = 1; i < mpi_size; i++) {
-            img_h = (total_h + i) / mpi_size;
-            MPI_Recv(obuf, 3 * img.w * img_h, MPI_CHAR, i, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            obuf += 3 * img.w * img_h;
-        }
-        obuf -= 3 * img.w * total_h;
-
+    free(sendbuf);
+    if (mpi_rank == 0) {
         FILE * out_file;
         out_file = fopen(path, "wb");
         fprintf(out_file, "P6\n");
         fprintf(out_file, "%d %d\n255\n",img.w, total_h);
         fwrite(obuf,sizeof(unsigned char), 3*img.w*total_h, out_file);
         fclose(out_file);
+        free(obuf);
     }
-
-    free(obuf);
 }
 
 void free_ppm(PPM_IMG img)
@@ -277,23 +268,13 @@ PGM_IMG read_pgm(const char * path){
     result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
     result.img = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
 
-    if (mpi_rank == 0) {
-        for (i = 0; i < result.w * result.h; i++) {
-            result.img[i] = ibuf[i];
-        }
-        ibuf += result.w * result.h;
-
-        int result_h;
-        for (i = 1; i < mpi_size; i++) {
-            result_h = (total_h + i) / mpi_size;
-            MPI_Send(ibuf, result.w * result_h, MPI_CHAR, i, 0, MPI_COMM_WORLD);
-            ibuf += result.w * result_h;
-        }
-        ibuf -= result.w * total_h;
+    int sendcnts[mpi_size], displs[mpi_size];
+    displs[0] = 0;
+    for (i = 0; i < mpi_size; i++) {
+        sendcnts[i] = ((total_h + i) / mpi_size) * total_w;
+        if (i < mpi_size - 1) displs[i + 1] = displs[i] + sendcnts[i];
     }
-    else {
-        MPI_Recv(result.img, result.w * result.h, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
+    MPI_Scatterv(ibuf, sendcnts, displs, MPI_UNSIGNED_CHAR, result.img, result.w * result.h, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
     
     if (mpi_rank == 0) free(ibuf);
     return result;
@@ -303,33 +284,28 @@ void write_pgm(PGM_IMG img, const char * path){
     int mpi_rank, mpi_size, total_h, i;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    MPI_Reduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    if (mpi_rank != 0) {
-        MPI_Send(img.img, img.w * img.h, MPI_CHAR, 0, 99, MPI_COMM_WORLD);
+    MPI_Allreduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    char * obuf;
+    if (mpi_rank == 0) obuf = (char *)malloc(img.w * total_h * sizeof(char));
+
+    int recvcnts[mpi_size], displs[mpi_size];
+    displs[0] = 0;
+    for (i = 0; i < mpi_size; i++) {
+        recvcnts[i] = ((total_h + i) / mpi_size) * img.w;
+        if (i < mpi_size - 1) displs[i + 1] = displs[i] + recvcnts[i];
     }
-    else {
-        char * obuf = (char *)malloc(img.w * total_h * sizeof(char));
+    MPI_Gatherv(img.img, img.w * img.h, MPI_UNSIGNED_CHAR, obuf, recvcnts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-        for (i = 0; i < img.w * img.h; i++) {
-            obuf[i] = img.img[i];
-        }
-        obuf += img.w * img.h;
-
-        int img_h;
-        for (i = 1; i < mpi_size; i++) {
-            img_h = (total_h + i) / mpi_size;
-            MPI_Recv(obuf, img.w * img_h, MPI_CHAR, i, 99, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            obuf += img.w * img_h;
-        }
-        obuf -= img.w * total_h;
-
+    if (mpi_rank == 0) {
         FILE * out_file;
         out_file = fopen(path, "wb");
         fprintf(out_file, "P5\n");
         fprintf(out_file, "%d %d\n255\n",img.w, total_h);
         fwrite(obuf,sizeof(unsigned char), img.w*total_h, out_file);
         fclose(out_file);
+        free(obuf);
     }
 }
 
