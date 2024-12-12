@@ -97,15 +97,12 @@ int main(){
                  local_img_c.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
                  MASTER, MPI_COMM_WORLD);
                  
-    // Barrier to ensure that all processes have received their corresponding chunk
-    MPI_Barrier(MPI_COMM_WORLD);
-
     printf("Running contrast enhancement for gray-scale images.\n");
     run_cpu_gray_test(local_img_g, local_height_g, total_height_g, total_width_g, chunk_heights_g, displacements_g);
     free_pgm(local_img_g);
     
     printf("Running contrast enhancement for color images.\n");
-    run_cpu_color_test(local_img_c, local_height_c, total_height_c, total_width_c, chunk_heights_c, displacements_c);
+    // run_cpu_color_test(local_img_c, local_height_c, total_height_c, total_width_c, chunk_heights_c, displacements_c);
     free_ppm(local_img_c);
     
     if (rank == MASTER){
@@ -264,8 +261,6 @@ void run_cpu_gray_test(PGM_IMG img_in, int local_height_g, int total_height_g, i
     tend = MPI_Wtime();
     printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
 
-    // Barrier to ensure that all processes have computed their local operations
-    MPI_Barrier(MPI_COMM_WORLD);
     // Gather processed grayscale image back to MASTER
     MPI_Gatherv(img_obuf.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
                 img_obuf_final.img, chunk_heights_g, displacements_g, MPI_UNSIGNED_CHAR,
