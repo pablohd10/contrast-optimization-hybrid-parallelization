@@ -243,16 +243,22 @@ void run_cpu_color_test(PPM_IMG img_in, int local_height_c, int total_height_c, 
 }
 
 void run_cpu_gray_test(PGM_IMG img_in, int local_height_g, int total_height_g, int total_width_g, int *chunk_heights_g, int *displacements_g) {
-    int rank;
+    int rank, num_procesos;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procesos);
 
     PGM_IMG img_obuf, img_obuf_final;
     double tstart, tend;
     
     printf("Starting CPU processing...\n");
-     // Allocate memory for the full image (MASTER process)
+
+    int chunk_pixels_g[num_procesos];
+    // Allocate memory for the full image (MASTER process)
     if (rank == MASTER) {
         img_obuf_final.img = (unsigned char *)malloc(total_height_g * total_width_g * sizeof(unsigned char));
+        for (int i = 0; i<num_procesos; i++){
+            chunk_pixels_g[i] = chunk_heights_g[i] * total_width_g;
+        }
     }
 
     // Start processing grayscale image
@@ -263,7 +269,7 @@ void run_cpu_gray_test(PGM_IMG img_in, int local_height_g, int total_height_g, i
 
     // Gather processed grayscale image back to MASTER
     MPI_Gatherv(img_obuf.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
-                img_obuf_final.img, chunk_heights_g, displacements_g, MPI_UNSIGNED_CHAR,
+                img_obuf_final.img, chunk_pixels_g, displacements_g, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
 
     // After gathering, MASTER saves the image
