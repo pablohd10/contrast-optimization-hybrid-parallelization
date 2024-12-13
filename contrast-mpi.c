@@ -6,7 +6,7 @@
 
 void run_cpu_color_test(PPM_IMG img_in);
 void run_cpu_gray_test(PGM_IMG img_in);
-void save_results_to_file(double time_taken);
+void save_results_to_file(double time_taken, int mode);
 
 
 int main(){
@@ -15,9 +15,6 @@ int main(){
 
     MPI_Init(NULL, NULL);
 
-    double start = MPI_Wtime(); // Get start time
-
-    
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
     // All processes process their local gray image
@@ -29,18 +26,13 @@ int main(){
     // All processes process their local color image
     run_cpu_color_test(img_ibuf_c);
     free_ppm(img_ibuf_c);
-    
-    double end = MPI_Wtime(); // Get end time
-    double time_taken = end - start; 
-    printf("Time taken: %f seconds\n", time_taken); 
-    save_results_to_file(time_taken);
 
     MPI_Finalize();
 
     return 0;
 }
 
-void save_results_to_file(double time_taken_local) {
+void save_results_to_file(double time_taken_local, int mode) {
     /*This function saves the time taken to process the images to a file only if the program is running on the 'gpus' partition of the Slurm cluster.*/
     // Reduce the time taken to process the images to get the maximum time taken
     double time_taken;
@@ -58,12 +50,19 @@ void save_results_to_file(double time_taken_local) {
     // Check if running on Slurm in the 'gpus' partition
     if (partition != NULL && strcmp(partition, "gpus") == 0) {
         // Open the file for appending. If it does not exist, it is created
-        FILE *outfile = fopen("./mpi-output/time_results.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        FILE *outfile;
+        if (mode == 0) {
+            outfile = fopen("./mpi-output/time_results_gray.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        } else if (mode == 1) {
+            outfile = fopen("./mpi-output/time_results_hsl.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        } else {
+            outfile = fopen("./mpi-output/time_results_yuv.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        }
         
         // Check if the file is open successfully
         if (outfile != NULL) {
             if (ftell(outfile) == 0) {  // If file is empty (end of file is at position 0), write headers
-                fprintf(outfile, "N (Nodes)\tn (Processes)\tTime (seconds)\n");
+                fprintf(outfile, "N (Nodes)\tn (Processes)\tTime (milliseconds)\n");
             }
 
             // write results
@@ -88,6 +87,7 @@ void run_cpu_color_test(PPM_IMG img_in)
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     tend = MPI_Wtime();
     printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
+    save_results_to_file((tend - tstart) * 1000, 1);
     
     write_ppm(img_obuf_hsl, "./mpi-output/out_hsl.ppm");
 
@@ -95,6 +95,7 @@ void run_cpu_color_test(PPM_IMG img_in)
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
     tend = MPI_Wtime();
     printf("YUV processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
+    save_results_to_file((tend - tstart) * 1000, 2);
     
     write_ppm(img_obuf_yuv, "./mpi-output/out_yuv.ppm");
     
@@ -117,6 +118,7 @@ void run_cpu_gray_test(PGM_IMG img_in)
     img_obuf = contrast_enhancement_g(img_in);
     tend = MPI_Wtime();
     printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
+    save_results_to_file((tend - tstart) * 1000, 0);
     
     write_pgm(img_obuf, "./mpi-output/out.pgm");
     free_pgm(img_obuf);
