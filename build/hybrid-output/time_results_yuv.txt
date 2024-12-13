@@ -1,0 +1,2 @@
+N (Nodes)	n (Processes)	Threads		Time (milliseconds)
+	1			8				11		9971.239203

@@ -8,7 +8,7 @@
 
 void run_cpu_color_test(PPM_IMG img_in);
 void run_cpu_gray_test(PGM_IMG img_in);
-void save_results_to_file(double time_taken, int max_threads);
+void save_results_to_file(double time_taken, int mode);
 
 int main(){
     PGM_IMG img_ibuf_g;
@@ -16,12 +16,8 @@ int main(){
 
     MPI_Init(NULL, NULL);
 
-    // Get start time using MPI_Wtime
-    double start = MPI_Wtime();
-
     // NUMBER OF THREADS
     omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 12-1 = 11 threads)
-    int max_threads = omp_get_max_threads();
 
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm"); // Returns the local image
@@ -33,24 +29,15 @@ int main(){
     img_ibuf_c = read_ppm("in.ppm"); // Returns the local image
     run_cpu_color_test(img_ibuf_c); // All processes process their local color image
     free_ppm(img_ibuf_c);
-    
-    // Get end time
-    double end = MPI_Wtime();
-
-    // Calculate duration
-    double time_taken = end - start;
-
-    // Print the time to the console
-    printf("Time taken: %f seconds\n", time_taken);
-
-    save_results_to_file(time_taken, max_threads);
 
     MPI_Finalize();
 
     return 0;
 }
 
-void save_results_to_file(double time_taken_local, int max_threads) {
+void save_results_to_file(double time_taken_local, int mode) {
+    int max_threads = omp_get_max_threads();
+
     double time_taken;
     // Reduce the time taken to process the images to get the maximum time taken
     MPI_Reduce(&time_taken_local, &time_taken, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -67,12 +54,19 @@ void save_results_to_file(double time_taken_local, int max_threads) {
     // Check if running on Slurm in the 'gpus' partition
     if (partition != NULL && strcmp(partition, "gpus") == 0) {
         // Open the file for appending. If it does not exist, it is created
-        FILE *outfile = fopen("./hybrid-output/time_results.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        FILE *outfile;
+        if (mode == 0) {
+            outfile = fopen("./hybrid-output/time_results_gray.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        } else if (mode == 1) {
+            outfile = fopen("./hybrid-output/time_results_hsl.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        } else {
+            outfile = fopen("./hybrid-output/time_results_yuv.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        }
         
         // Check if the file is open successfully
         if (outfile != NULL) {
             if (ftell(outfile) == 0) {  // If file is empty (end of file is at position 0), write headers
-                fprintf(outfile, "N (Nodes)\tn (Processes)\tThreads\t\tTime (seconds)\n");
+                fprintf(outfile, "N (Nodes)\tn (Processes)\tThreads\t\tTime (milliseconds)\n");
             }
 
             // write results
@@ -96,6 +90,7 @@ void run_cpu_color_test(PPM_IMG img_in){
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     tend = MPI_Wtime();
     printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
+    save_results_to_file((tend - tstart) * 1000, 1);
     
     write_ppm(img_obuf_hsl, "./hybrid-output/out_hsl.ppm");
 
@@ -103,6 +98,7 @@ void run_cpu_color_test(PPM_IMG img_in){
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
     tend = MPI_Wtime();
     printf("YUV processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
+    save_results_to_file((tend - tstart) * 1000, 2);
     
     write_ppm(img_obuf_yuv, "./hybrid-output/out_yuv.ppm");
     
@@ -120,6 +116,7 @@ void run_cpu_gray_test(PGM_IMG img_in){
     img_obuf = contrast_enhancement_g(img_in);
     tend = MPI_Wtime();
     printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
+    save_results_to_file((tend - tstart) * 1000, 0);
     
     write_pgm(img_obuf, "./hybrid-output/out.pgm");
     free_pgm(img_obuf);
