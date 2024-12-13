@@ -16,6 +16,9 @@ int main(){
 
     MPI_Init(NULL, NULL);
 
+    // Get start time using MPI_Wtime
+    double start = MPI_Wtime();
+
     // NUMBER OF THREADS
     omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 12-1 = 11 threads)
 
@@ -29,6 +32,11 @@ int main(){
     img_ibuf_c = read_ppm("in.ppm"); // Returns the local image
     run_cpu_color_test(img_ibuf_c); // All processes process their local color image
     free_ppm(img_ibuf_c);
+
+    double end = MPI_Wtime(); // Get end time
+    double time_taken = (end - start) * 1000; // Calculate duration
+    printf("Time taken: %f milliseconds\n", time_taken); // Print the time to the console
+    save_results_to_file(time_taken, 3);
 
     MPI_Finalize();
 
@@ -59,8 +67,10 @@ void save_results_to_file(double time_taken_local, int mode) {
             outfile = fopen("./hybrid-output/time_results_gray.txt", "a"); // mode "a" -> stream is positioned at the end of the file
         } else if (mode == 1) {
             outfile = fopen("./hybrid-output/time_results_hsl.txt", "a"); // mode "a" -> stream is positioned at the end of the file
-        } else {
+        } else if (mode == 2) {
             outfile = fopen("./hybrid-output/time_results_yuv.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        } else {
+            outfile = fopen("./hybrid-output/time_results_total.txt", "a"); // mode "a" -> stream is positioned at the end of the file
         }
         
         // Check if the file is open successfully

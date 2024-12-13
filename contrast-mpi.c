@@ -15,6 +15,9 @@ int main(){
 
     MPI_Init(NULL, NULL);
 
+    // Get start time using MPI_Wtime
+    double start = MPI_Wtime();
+
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
     // All processes process their local gray image
@@ -26,6 +29,11 @@ int main(){
     // All processes process their local color image
     run_cpu_color_test(img_ibuf_c);
     free_ppm(img_ibuf_c);
+    
+    double end = MPI_Wtime(); // Get end time
+    double time_taken = (end - start) * 1000; // Calculate duration
+    printf("Time taken: %f milliseconds\n", time_taken); // Print the time to the console
+    save_results_to_file(time_taken, 3);
 
     MPI_Finalize();
 
@@ -55,8 +63,10 @@ void save_results_to_file(double time_taken_local, int mode) {
             outfile = fopen("./mpi-output/time_results_gray.txt", "a"); // mode "a" -> stream is positioned at the end of the file
         } else if (mode == 1) {
             outfile = fopen("./mpi-output/time_results_hsl.txt", "a"); // mode "a" -> stream is positioned at the end of the file
-        } else {
+        } else if (mode == 2) {
             outfile = fopen("./mpi-output/time_results_yuv.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        } else {
+            outfile = fopen("./mpi-output/time_results_total.txt", "a"); // mode "a" -> stream is positioned at the end of the file
         }
         
         // Check if the file is open successfully
