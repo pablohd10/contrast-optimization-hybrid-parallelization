@@ -70,19 +70,22 @@ int main(){
     MPI_Bcast(displacements, num_procesos, MPI_INT, MASTER, MPI_COMM_WORLD);
     
     // Cada proceso asigna su local_height basado en su rank
+    // Eacgh process gets assigned its height by his rank
     int local_height = chunk_heights[rank];
     int local_pixels = local_height * total_width;
 
-    // Asignar memoria para imágenes locales
+    // Allocate memory for local images
     local_img_g.w = total_width;
     local_img_g.h = local_height;
-    local_img_g.img = (unsigned char *)malloc(local_pixels * sizeof(unsigned char));
+	
+	// We depreciate all "sizeof(unsigned char)" as it's 1, so it is REDUNDANT in a multiplication 
+    local_img_g.img = (unsigned char *)malloc(local_pixels);	// * sizeof(unsigned char) (= 1)
 	
     local_img_c.w = total_width;
     local_img_c.h = local_height;
-    local_img_c.img_r = (unsigned char *)malloc(local_pixels * sizeof(unsigned char));
-    local_img_c.img_g = (unsigned char *)malloc(local_pixels * sizeof(unsigned char));
-    local_img_c.img_b = (unsigned char *)malloc(local_pixels * sizeof(unsigned char));
+    local_img_c.img_r = (unsigned char *)malloc(local_pixels);	// * sizeof(unsigned char) 
+    local_img_c.img_g = (unsigned char *)malloc(local_pixels);	// ''
+    local_img_c.img_b = (unsigned char *)malloc(local_pixels);	// ''
 
 
     // Distribuir la imagen en gris usando Scatterv
@@ -195,15 +198,16 @@ void run_cpu_color_test(PPM_IMG img_in, int local_height, int total_height, int 
     if (rank == MASTER) {
 		img_obuf_final_hsl.w     = total_width;
 		img_obuf_final_hsl.h     = total_height;
-        img_obuf_final_hsl.img_r = (unsigned char *)malloc(total_pixels * sizeof(unsigned char));
-        img_obuf_final_hsl.img_g = (unsigned char *)malloc(total_pixels * sizeof(unsigned char));
-        img_obuf_final_hsl.img_b = (unsigned char *)malloc(total_pixels * sizeof(unsigned char));
+		// We depreciate all "sizeof(unsigned char)" as it's 1, so it is REDUNDANT in a multiplication 
+        img_obuf_final_hsl.img_r = (unsigned char *)malloc(total_pixels);	// * sizeof(unsigned char) (= 1)
+        img_obuf_final_hsl.img_g = (unsigned char *)malloc(total_pixels);	// ''
+        img_obuf_final_hsl.img_b = (unsigned char *)malloc(total_pixels);	// ''
 
 		img_obuf_final_yuv.w     = total_width;
 		img_obuf_final_yuv.h     = total_height;
-        img_obuf_final_yuv.img_r = (unsigned char *)malloc(total_pixels * sizeof(unsigned char));
-        img_obuf_final_yuv.img_g = (unsigned char *)malloc(total_pixels * sizeof(unsigned char));
-        img_obuf_final_yuv.img_b = (unsigned char *)malloc(total_pixels * sizeof(unsigned char));
+        img_obuf_final_yuv.img_r = (unsigned char *)malloc(total_pixels);	// ''
+        img_obuf_final_yuv.img_g = (unsigned char *)malloc(total_pixels);	// ''
+        img_obuf_final_yuv.img_b = (unsigned char *)malloc(total_pixels);	// ''
     }
 
     // Start processing HSL
