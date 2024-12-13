@@ -260,7 +260,7 @@ PPM_IMG yuv2rgb(YUV_IMG img_in){
     img_out.img_r = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
     img_out.img_g = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
     img_out.img_b = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
-.
+
     #pragma omp parallel for private(y, cb, cr, rt, gt, bt) schedule(static)
     for(int i = 0; i < img_out.w*img_out.h; i ++){
         y  = (int)img_in.img_y[i];
