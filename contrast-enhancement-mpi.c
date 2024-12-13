@@ -3,16 +3,6 @@
 #include <stdlib.h>
 #include "hist-equ.h"
 
-void print_result_img(unsigned char *img, int width, int height) {
-    printf("w: %d", "h: %d", width, height);
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            int index = i * width + j; // Calculate the 1D index for the 2D array
-            printf("%u ", img[index]); // Print the value as an unsigned integer
-        }
-        printf("\n"); // Newline after each row for better readability
-    }
-}
 
 PGM_IMG contrast_enhancement_g(PGM_IMG img_in){
     PGM_IMG result;
@@ -24,7 +14,6 @@ PGM_IMG contrast_enhancement_g(PGM_IMG img_in){
     histogram(hist, img_in.img, img_in.h * img_in.w, 256);
     histogram_equalization(result.img,img_in.img,hist,result.w*result.h, 256);
     
-    //print_result_img(result.img, result.w, result.h);
     return result;
 }
 

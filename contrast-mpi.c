@@ -5,124 +5,133 @@
 #include "hist-equ.h"
 
 #define MASTER 0
+#define COMASTER 1
 
-void run_cpu_color_test(PPM_IMG img_in, int local_height_c, int total_height_c, int total_width_c, int *chunk_heights_c, int *displacements_c);
-void run_cpu_gray_test(PGM_IMG img_in, int local_height_c, int total_height_g, int total_width_c, int *chunk_heights_c, int *displacements_c);
-
-// Auxiliary functions
+void run_cpu_color_test(PPM_IMG img_in, int total_height_c, int total_width_c, int * chunk_pixels_c, int * displacements_pixels_c);
+void run_cpu_gray_test(PGM_IMG img_in, int total_height_g, int total_width_g, int * chunk_pixels_g, int * displacements_pixels_g);
 void save_results_to_file(double time_taken);
-void calculate_chunk_height(int num_procesos, int total_height, int *chunk_heights, int *row_displacements);
+
+void calculate_chunk_height(int num_procesos, int total_height, int total_width, int *chunk_heights, int* chunk_pixels, int *displacements_pixels);
+
+
 
 int main(){
-
     MPI_Init(NULL, NULL);
 
-    PGM_IMG img_ibuf_g, local_img_g;
-    PPM_IMG img_ibuf_c, local_img_c;
-
-    int total_width_g, total_width_c, total_height_g, total_height_c;
-
-    double start;
-
     // Obtain information about the process it is being executed and the total number of processes
-    int num_procesos, rank, len_node_name;
-    char node_name[MPI_MAX_PROCESSOR_NAME];
+    int num_procesos, rank;
 
     MPI_Comm_size(MPI_COMM_WORLD, &num_procesos);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Get_processor_name(node_name, &len_node_name);
 
-    // Varables for chunking
-    int *chunk_heights_g, *displacements_g, *chunk_heights_c, *displacements_c;
+    PGM_IMG img_ibuf_g; 
+    PPM_IMG img_ibuf_c;
 
-    // Only the MASTER process reads the images. MAYBE WE CAN DO THAT 1 PROCESS READS PGM AND ANOTHER THE PPM IN PARALLEL
+    int total_width_g, total_width_c, total_height_g, total_height_c;
+
+    int *chunk_pixels_g, *displacements_pixels_g, *chunk_heights_g, *chunk_pixels_c, *displacements_pixels_c, *chunk_heights_c; 
+
+    // Get start time using MPI_Wtime
+    double start = MPI_Wtime();
+
+    // Read images
     if (rank == MASTER){
 
-        // Get start time using MPI_Wtime
-        start = MPI_Wtime();
-
-        printf("MASTER process (%d) reading pgm image.\n", rank);
+        printf("Running contrast enhancement for gray-scale images.\n");
         img_ibuf_g = read_pgm("in.pgm");
         total_width_g = img_ibuf_g.w;
         total_height_g = img_ibuf_g.h;
-        
-        printf("MASTER process (%d) reading ppm image.\n", rank);
+
+        // Calculate the height of each chunk and what the position at which it starts
+        chunk_pixels_g = (int *) malloc(num_procesos * sizeof(int));
+        displacements_pixels_g = (int *) malloc(num_procesos * sizeof(int));
+        chunk_heights_g = (int *) malloc(num_procesos * sizeof(int));
+        calculate_chunk_height(num_procesos, img_ibuf_g.h, img_ibuf_g.w, chunk_heights_g, chunk_pixels_g, displacements_pixels_g);
+    }
+
+    if (rank == COMASTER){
+
+        printf("Running contrast enhancement for color images.\n");
         img_ibuf_c = read_ppm("in.ppm");
         total_width_c = img_ibuf_c.w;
         total_height_c = img_ibuf_c.h;
 
         // Calculate the height of each chunk and what the position at which it starts
-        chunk_heights_g = (int *) malloc(num_procesos * sizeof(int));
-        displacements_g = (int *) malloc(num_procesos * sizeof(int));
+        chunk_pixels_c = (int *) malloc(num_procesos * sizeof(int));
+        displacements_pixels_c = (int *) malloc(num_procesos * sizeof(int));
         chunk_heights_c = (int *) malloc(num_procesos * sizeof(int));
-        displacements_c = (int *) malloc(num_procesos * sizeof(int));
-        calculate_chunk_height(num_procesos, total_height_g, chunk_heights_g, displacements_g);
-        calculate_chunk_height(num_procesos, total_height_c, chunk_heights_c, displacements_c);
+        calculate_chunk_height(num_procesos, img_ibuf_c.h, img_ibuf_c.w, chunk_heights_c, chunk_pixels_c, displacements_pixels_c);
     }
 
     // Broadcast image width and height
     MPI_Bcast(&total_width_g, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&total_width_c, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(&total_height_g, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&total_height_c, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
 
-    int local_height_g, local_height_c;
     // Scatter chunk heights
+    int local_height_g;
     MPI_Scatter(chunk_heights_g, 1, MPI_INT, &local_height_g, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Scatter(chunk_heights_c, 1, MPI_INT, &local_height_c, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
 
     // Allocate space for local PGM_IMG
+    PGM_IMG local_img_g;
     local_img_g.w = total_width_g;
     local_img_g.h = local_height_g;
     local_img_g.img = (unsigned char *)malloc(local_height_g * total_width_g * sizeof(unsigned char));
+
+    // Scatter gray image rows
+    MPI_Scatterv(img_ibuf_g.img, chunk_pixels_g, displacements_pixels_g, MPI_UNSIGNED_CHAR,
+                 local_img_g.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
+                 MASTER, MPI_COMM_WORLD);
+
+    run_cpu_gray_test(local_img_g, total_height_g, total_width_g, chunk_pixels_g, displacements_pixels_g);
+
+    free_pgm(img_ibuf_g);
+
+    // Broadcast image width and height from COMASTER
+    MPI_Bcast(&total_width_c, 1, MPI_INT, COMASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&total_height_c, 1, MPI_INT, COMASTER, MPI_COMM_WORLD);
+
+    // Scatter chunk heights from COMASTER
+    int local_height_c;
+    MPI_Scatter(chunk_heights_c, 1, MPI_INT, &local_height_c, 1, MPI_INT, COMASTER, MPI_COMM_WORLD);
+
     // Allocate space for local PPM_IMG
+    PPM_IMG local_img_c;
     local_img_c.w = total_width_c;
     local_img_c.h = local_height_c;
     local_img_c.img_r = (unsigned char *)malloc(local_height_c * total_width_c * sizeof(unsigned char));
     local_img_c.img_g = (unsigned char *)malloc(local_height_c * total_width_c * sizeof(unsigned char));
     local_img_c.img_b = (unsigned char *)malloc(local_height_c * total_width_c * sizeof(unsigned char));
-
-    // Scatter gray image rows
-    MPI_Scatterv(img_ibuf_g.img, chunk_heights_g, displacements_g, MPI_UNSIGNED_CHAR,
-                 local_img_g.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-    // Scatter rgb image rows
-    MPI_Scatterv(img_ibuf_c.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    // Scatter rgb image rows from COMASTER
+    MPI_Scatterv(img_ibuf_c.img_r, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                  local_img_c.img_r, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-    MPI_Scatterv(img_ibuf_c.img_g, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+                 COMASTER, MPI_COMM_WORLD);
+    MPI_Scatterv(img_ibuf_c.img_g, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                  local_img_c.img_g, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-    MPI_Scatterv(img_ibuf_c.img_b, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+                 COMASTER, MPI_COMM_WORLD);
+    MPI_Scatterv(img_ibuf_c.img_b, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                  local_img_c.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                 MASTER, MPI_COMM_WORLD);
-                 
-    printf("Running contrast enhancement for gray-scale images.\n");
-    run_cpu_gray_test(local_img_g, local_height_g, total_height_g, total_width_g, chunk_heights_g, displacements_g);
-    free_pgm(local_img_g);
-    
-    printf("Running contrast enhancement for color images.\n");
-    // run_cpu_color_test(local_img_c, local_height_c, total_height_c, total_width_c, chunk_heights_c, displacements_c);
-    free_ppm(local_img_c);
-    
-    if (rank == MASTER){
-        // Get end time
-        double end = MPI_Wtime();
-        // Calculate duration
-        double time_taken = end - start;
-        printf("Time taken: %f seconds\n", time_taken);
-        save_results_to_file(time_taken);
+                 COMASTER, MPI_COMM_WORLD);
 
-        free_pgm(img_ibuf_g);
-        free_ppm(img_ibuf_c);
-    }
+    run_cpu_color_test(local_img_c, total_height_c, total_width_c, chunk_pixels_c, displacements_pixels_c);
+    free_ppm(img_ibuf_c);
+    
+    // Get end time
+    double end = MPI_Wtime();
+
+    // Calculate duration
+    double time_taken = end - start;
 
     MPI_Finalize();
+
+    // Print the time to the console
+    printf("Time taken: %f seconds\n", time_taken);
+
+    save_results_to_file(time_taken);
 
     return 0;
 }
 
-void calculate_chunk_height(int num_procesos, int total_height, int *chunk_heights, int *row_displacements) {
+void calculate_chunk_height(int num_procesos, int total_height, int total_width, int *chunk_heights, int* chunk_pixels, int *displacements_pixels) {
     int base_height = total_height / num_procesos;
     int remainder = total_height % num_procesos;
 
@@ -132,11 +141,13 @@ void calculate_chunk_height(int num_procesos, int total_height, int *chunk_heigh
         // Distribute the extra rows (remainder) among the first processes
         chunk_heights[i] = base_height + (i < remainder ? 1 : 0);
 
-        // Calculate the starting row for each process
-        row_displacements[i] = offset;
+        chunk_pixels[i] = chunk_heights[i] * total_width;
 
-        // Update offset to point to the next process's starting row
-        offset += chunk_heights[i];
+        // Calculate the starting pixel for each process
+        displacements_pixels[i] = offset;
+
+        // Update offset to point to the next process's starting pixel
+        offset += chunk_pixels[i];
     }
 }
 
@@ -149,7 +160,7 @@ void save_results_to_file(double time_taken) {
     // Check if running on Slurm in the 'gpus' partition
     if (partition != NULL && strcmp(partition, "gpus") == 0) {
         // Open the file for appending. If it does not exist, it is created
-        FILE *outfile = fopen("./mpi-output/time_results.txt", "a"); // mode "a" -> stream is positioned at the end of the file
+        FILE *outfile = fopen("./sequential-output/time_results.txt", "a"); // mode "a" -> stream is positioned at the end of the file
         
         // Check if the file is open successfully
         if (outfile != NULL) {
@@ -168,119 +179,119 @@ void save_results_to_file(double time_taken) {
     }
 }
 
-void run_cpu_color_test(PPM_IMG img_in, int local_height_c, int total_height_c, int total_width_c, int *chunk_heights_c, int *displacements_c) {
-    int rank;
+void run_cpu_color_test(PPM_IMG img_in, int total_height_c, int total_width_c, int * chunk_pixels_c, int * displacements_pixels_c){
+    int rank, num_procesos;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procesos);
 
-    PPM_IMG img_obuf_hsl, img_obuf_yuv, img_obuf_final_hsl, img_obuf_final_yuv;
+    PPM_IMG img_obuf_hsl, img_obuf_yuv, result_img_c_hsl, result_img_c_yuv;
     double tstart, tend;
+
+    if (rank == MASTER){
+        printf("total width: %d\n", total_width_c);
+        printf("total height: %d\n", total_height_c);
+        result_img_c_hsl.w = total_width_c;
+        result_img_c_hsl.h = total_height_c;
+        result_img_c_hsl.img_r = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
+        result_img_c_hsl.img_g = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
+        result_img_c_hsl.img_b = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
+
+        result_img_c_yuv.w = total_width_c;
+        result_img_c_yuv.h = total_height_c;
+        result_img_c_yuv.img_r = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
+        result_img_c_yuv.img_g = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
+        result_img_c_yuv.img_b = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));    
+    }
     
     printf("Starting CPU processing...\n");
-
-     // Allocate memory for the full image (MASTER process)
-    if (rank == MASTER) {
-        img_obuf_final_hsl.img_r = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_hsl.img_g = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_hsl.img_b = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-
-        img_obuf_final_yuv.img_r = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_yuv.img_g = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-        img_obuf_final_yuv.img_b = (unsigned char *)malloc(total_height_c * total_width_c * sizeof(unsigned char));
-    }
-
-    // Start processing HSL
+    
     tstart = MPI_Wtime();
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     tend = MPI_Wtime();
-    printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
+    printf("HSL processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
     
-    // Barrier to ensure that all processes have computed their local operations
-    MPI_Barrier(MPI_COMM_WORLD);
-    // Gather processed HSL image back to MASTER
-    MPI_Gatherv(img_obuf_hsl.img_r, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_hsl.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    // Gather processed image back to MASTER
+    MPI_Gatherv(img_obuf_hsl.img_r, img_obuf_hsl.w * img_obuf_hsl.h, MPI_UNSIGNED_CHAR,
+                result_img_c_hsl.img_r, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_hsl.img_g, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_hsl.img_g, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    MPI_Gatherv(img_obuf_hsl.img_g, img_obuf_hsl.w * img_obuf_hsl.h, MPI_UNSIGNED_CHAR,
+                result_img_c_hsl.img_g, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_hsl.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_hsl.img_b, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    MPI_Gatherv(img_obuf_hsl.img_b, img_obuf_hsl.w * img_obuf_hsl.h, MPI_UNSIGNED_CHAR,
+                result_img_c_hsl.img_b, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-
 
     // After gathering, MASTER saves the image
     if (rank == MASTER) {
-        write_ppm(img_obuf_hsl, "./mpi-output/out_hsl.ppm");
+        write_ppm(result_img_c_hsl, "./mpi-output/out_hsl.ppm");
+        free_ppm(result_img_c_hsl);
+        printf("out_hsl.ppm guardado con éxito\n");
     }
 
-    // Process YUV
     tstart = MPI_Wtime();
     img_obuf_yuv = contrast_enhancement_c_yuv(img_in);
     tend = MPI_Wtime();
     printf("YUV processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
     
-    // Barrier to ensure that all processes have computed their local operations
-    MPI_Barrier(MPI_COMM_WORLD);
-    // Gather processed YUV image back to MASTER
-    MPI_Gatherv(img_obuf_yuv.img_r, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_yuv.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    // Gather processed image back to MASTER
+    MPI_Gatherv(img_obuf_yuv.img_r, img_obuf_yuv.w * img_obuf_yuv.h, MPI_UNSIGNED_CHAR,
+                result_img_c_yuv.img_r, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_yuv.img_g, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_yuv.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    MPI_Gatherv(img_obuf_yuv.img_g, img_obuf_yuv.w * img_obuf_yuv.h, MPI_UNSIGNED_CHAR,
+                result_img_c_yuv.img_g, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-    MPI_Gatherv(img_obuf_yuv.img_b, local_height_c * total_width_c, MPI_UNSIGNED_CHAR,
-                img_obuf_final_yuv.img_r, chunk_heights_c, displacements_c, MPI_UNSIGNED_CHAR,
+    MPI_Gatherv(img_obuf_yuv.img_b, img_obuf_yuv.w * img_obuf_yuv.h, MPI_UNSIGNED_CHAR,
+                result_img_c_yuv.img_b, chunk_pixels_c, displacements_pixels_c, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-
-    // After gathering, MASTER saves the image
+    
+     // After gathering, MASTER saves the image
     if (rank == MASTER) {
-        write_ppm(img_obuf_final_yuv, "./mpi-output/out_yuv.ppm");
-        free_ppm(img_obuf_final_hsl);
-        free_ppm(img_obuf_final_yuv);
+        write_ppm(result_img_c_yuv, "./mpi-output/out_hsl.ppm");
+        free_ppm(result_img_c_yuv);
+        printf("out_yuv.ppm guardado con éxito\n");
     }
+    
     free_ppm(img_obuf_hsl);
     free_ppm(img_obuf_yuv);
 }
 
-void run_cpu_gray_test(PGM_IMG img_in, int local_height_g, int total_height_g, int total_width_g, int *chunk_heights_g, int *displacements_g) {
+void run_cpu_gray_test(PGM_IMG img_in, int total_height_g, int total_width_g, int * chunk_pixels_g, int * displacements_pixels_g){
     int rank, num_procesos;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procesos);
+    PGM_IMG result_img_g;
 
-    PGM_IMG img_obuf, img_obuf_final;
+    if (rank == MASTER){
+        printf("total width: %d\n", total_width_g);
+        printf("total height: %d\n", total_height_g);
+        result_img_g.w = total_width_g;
+        result_img_g.h = total_height_g;
+        result_img_g.img = (unsigned char *)malloc(total_height_g * total_width_g * sizeof(unsigned char));
+    }
+
+    PGM_IMG img_obuf;
     double tstart, tend;
     
     printf("Starting CPU processing...\n");
-
-    int chunk_pixels_g[num_procesos];
-    // Allocate memory for the full image (MASTER process)
-    if (rank == MASTER) {
-        img_obuf_final.img = (unsigned char *)malloc(total_height_g * total_width_g * sizeof(unsigned char));
-        for (int i = 0; i<num_procesos; i++){
-            chunk_pixels_g[i] = chunk_heights_g[i] * total_width_g;
-        }
-    }
-
-    // Start processing grayscale image
     tstart = MPI_Wtime();
     img_obuf = contrast_enhancement_g(img_in);
     tend = MPI_Wtime();
-    printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */);
+    printf("Processing time: %f (ms)\n", (tend - tstart) * 1000 /* TIMER */ );
 
     // Gather processed grayscale image back to MASTER
-    MPI_Gatherv(img_obuf.img, local_height_g * total_width_g, MPI_UNSIGNED_CHAR,
-                img_obuf_final.img, chunk_pixels_g, displacements_g, MPI_UNSIGNED_CHAR,
+    MPI_Gatherv(img_obuf.img, img_obuf.w * img_obuf.h, MPI_UNSIGNED_CHAR,
+                result_img_g.img, chunk_pixels_g, displacements_pixels_g, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
 
     // After gathering, MASTER saves the image
     if (rank == MASTER) {
-        write_pgm(img_obuf, "./mpi-output/out.pgm");
-        free_pgm(img_obuf_final);
+        write_pgm(result_img_g, "./mpi-output/out.pgm");
+        free_pgm(result_img_g);
+        printf("out.pgm guardado con éxito\n");
     }
 
     free_pgm(img_obuf);
 }
-
 
 PPM_IMG read_ppm(const char * path){
     FILE * in_file;
@@ -344,8 +355,7 @@ void write_ppm(PPM_IMG img, const char * path){
     free(obuf);
 }
 
-void free_ppm(PPM_IMG img)
-{
+void free_ppm(PPM_IMG img){
     free(img.img_r);
     free(img.img_g);
     free(img.img_b);
@@ -389,7 +399,6 @@ void write_pgm(PGM_IMG img, const char * path){
     fclose(out_file);
 }
 
-void free_pgm(PGM_IMG img)
-{
+void free_pgm(PGM_IMG img){
     free(img.img);
 }
