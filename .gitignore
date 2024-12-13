@@ -3,18 +3,20 @@ build/*
 
 !build/sequential-output
 build/sequential-output/*
-!build/sequential-output/time_results.txt
+!build/sequential-output/time_results*
 
 !build/omp-output
 build/omp-output/*
-!build/omp-output/time_results.txt
+!build/omp-output/time_results*
 
 !build/mpi-output
 build/mpi-output/*
-!build/mpi-output/time_results.txt
+!build/mpi-output/time_results*
 
 !build/hybrid-output
 build/hybrid-output/*
-!build/hybrid-output/time_results.txt
+!build/hybrid-output/time_results*
+
+./CMakeLists.txt
 
 .vscode
