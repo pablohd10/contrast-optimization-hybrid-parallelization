@@ -31,8 +31,8 @@ int main(){
     free_ppm(img_ibuf_c);
     
     double end = MPI_Wtime(); // Get end time
-    double time_taken = end - start; // Calculate duration
-    printf("Time taken: %f seconds\n", time_taken); // Print the time to the console
+    double time_taken = end - start; 
+    printf("Time taken: %f seconds\n", time_taken); 
     save_results_to_file(time_taken);
 
     MPI_Finalize();
