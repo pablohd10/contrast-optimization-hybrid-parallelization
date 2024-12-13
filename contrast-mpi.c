@@ -205,7 +205,7 @@ void write_ppm(PPM_IMG img, const char * path){
     // Reduce the height of the local images to get the total height
     MPI_Allreduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     
-    // Gather the pixels of the local images
+    // Obtain the pixels of the local images in a single buffer
     char * sendbuf;
     sendbuf = (char *)malloc(3 * img.w * img.h * sizeof(char));    
     for(i = 0; i < img.w*img.h; i ++){

@@ -24,14 +24,14 @@ int main(){
     int max_threads = omp_get_max_threads();
 
     printf("Running contrast enhancement for gray-scale images.\n");
-    img_ibuf_g = read_pgm("in.pgm");
-    run_cpu_gray_test(img_ibuf_g);
+    img_ibuf_g = read_pgm("in.pgm"); // Returns the local image
+    run_cpu_gray_test(img_ibuf_g); // All processes process their local gray image
     free_pgm(img_ibuf_g);
     
     // ppm
     printf("Running contrast enhancement for color images.\n");
-    img_ibuf_c = read_ppm("in.ppm");
-    run_cpu_color_test(img_ibuf_c);
+    img_ibuf_c = read_ppm("in.ppm"); // Returns the local image
+    run_cpu_color_test(img_ibuf_c); // All processes process their local color image
     free_ppm(img_ibuf_c);
     
     // Get end time
@@ -52,11 +52,12 @@ int main(){
 
 void save_results_to_file(double time_taken_local, int max_threads) {
     double time_taken;
+    // Reduce the time taken to process the images to get the maximum time taken
     MPI_Reduce(&time_taken_local, &time_taken, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     
     int mpi_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-    if (mpi_rank != 0) return;
+    if (mpi_rank != 0) return; // Only rank 0 writes to the file
 
     // Get Slurm job information
     const char* partition = getenv("SLURM_JOB_PARTITION");
@@ -91,8 +92,6 @@ void run_cpu_color_test(PPM_IMG img_in){
     
     printf("Starting CPU processing...\n");
     
-    // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (hsl and yuv). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
-    // HOWEVER maybe oversubscription is produced since we will have many threads at the same time as each of these functions are also parallelized (for loops)
     tstart = MPI_Wtime();
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     tend = MPI_Wtime();
@@ -133,6 +132,7 @@ PPM_IMG read_ppm(const char * path){
 
     char *ibuf;
     int i, total_w, total_h;
+    // Rank 0 reads the image
     if (mpi_rank == 0) {
         FILE * in_file;
         char sbuf[256];
@@ -158,29 +158,36 @@ PPM_IMG read_ppm(const char * path){
             total_h = 0;
         }
     }
+    // Broadcast the image size to all processes
     MPI_Bcast(&total_h, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&total_w, 1, MPI_INT, 0, MPI_COMM_WORLD);
     if (total_h == 0) exit(1);
     
+    // Local image
     PPM_IMG result;
     result.w = total_w;
     result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
-
+    
+    // Receive buffer
     char * receivebuf;
     receivebuf = (char *)malloc(3 * result.w * result.h * sizeof(char));
 
+    // Calculate the number of pixels to send to each process and the displacements
     int sendcnts[mpi_size], displs[mpi_size];
     displs[0] = 0;
     for (i = 0; i < mpi_size; i++) {
         sendcnts[i] = 3 * ((total_h + i) / mpi_size) * total_w;
         if (i < mpi_size - 1) displs[i + 1] = displs[i] + sendcnts[i];
-    }
+    }   
 
+    // Scatter the pixels of the image to all processes
     MPI_Scatterv(ibuf, sendcnts, displs, MPI_UNSIGNED_CHAR, receivebuf, 3 * result.w * result.h, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
+    // Allocate memory for the image
     result.img_r = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
+    // Copy the pixels to the local image in a parallel loop
     #pragma omp parallel for schedule(static)
     for (i = 0; i < result.w * result.h; i++) {
         result.img_r[i] = receivebuf[3 * i + 0];
@@ -197,11 +204,12 @@ void write_ppm(PPM_IMG img, const char * path){
     int mpi_rank, mpi_size, total_h, i;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    // Reduce the height of the image to get the total height
     MPI_Allreduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     
+    // Obtain the pixels of the local images in a buffer in a parallel loop
     char * sendbuf;
     sendbuf = (char *)malloc(3 * img.w * img.h * sizeof(char));    
-    // POSSIBLE SECTION TO PARALLELIZE. This loop goes through each pixel of the image and assigns the RGB values to the corresponding position of obuf. (O(w*h) time complexity)
     #pragma omp parallel for schedule(static)
     for(i = 0; i < img.w*img.h; i ++){
         sendbuf[3*i + 0] = img.img_r[i];
@@ -209,19 +217,22 @@ void write_ppm(PPM_IMG img, const char * path){
         sendbuf[3*i + 2] = img.img_b[i];
     }
 
+     // Allocate memory for the result image in rank 0
     char * obuf;
     if (mpi_rank == 0) obuf = (char *)malloc(3 * img.w * total_h * sizeof(char));
 
+    // Calculate the number of pixels each process sends to rank 0 and the displacements
     int recvcnts[mpi_size], displs[mpi_size];
     displs[0] = 0;
     for (i = 0; i < mpi_size; i++) {
         recvcnts[i] = 3 * ((total_h + i) / mpi_size) * img.w;
         if (i < mpi_size - 1) displs[i + 1] = displs[i] + recvcnts[i];
     }
+    // Gather the pixels of the local images to rank 0
     MPI_Gatherv(sendbuf, 3 * img.w * img.h, MPI_UNSIGNED_CHAR, obuf, recvcnts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
 
     free(sendbuf);
+    // Rank 0 writes the result image to the file
     if (mpi_rank == 0) {
         FILE * out_file;
         out_file = fopen(path, "wb");
@@ -245,6 +256,7 @@ PGM_IMG read_pgm(const char * path){
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     
+    // Rank 0 reads the image
     char *ibuf;
     int i, total_w, total_h;
     if (mpi_rank == 0) {
@@ -269,21 +281,25 @@ PGM_IMG read_pgm(const char * path){
             total_h = 0;
         }
     }
+    // Broadcast the image size to all processes
     MPI_Bcast(&total_h, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&total_w, 1, MPI_INT, 0, MPI_COMM_WORLD);
     if (total_h == 0) exit(1);
     
+    // Local image
     PGM_IMG result;
     result.w = total_w;
     result.h = (total_h + mpi_rank) / mpi_size; // distribute pixel rows to processes
     result.img = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
 
+    // Calculate the number of pixels each process sends to each process and the displacements
     int sendcnts[mpi_size], displs[mpi_size];
     displs[0] = 0;
     for (i = 0; i < mpi_size; i++) {
         sendcnts[i] = ((total_h + i) / mpi_size) * total_w;
         if (i < mpi_size - 1) displs[i + 1] = displs[i] + sendcnts[i];
     }
+    // Scatter the pixels of the image to all processes
     MPI_Scatterv(ibuf, sendcnts, displs, MPI_UNSIGNED_CHAR, result.img, result.w * result.h, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
     
     if (mpi_rank == 0) free(ibuf);
@@ -295,19 +311,24 @@ void write_pgm(PGM_IMG img, const char * path){
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
+    // Reduce the height of the image to get the total height
     MPI_Allreduce(&img.h, &total_h, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
+    // Allocate memory for the pixels of the result image in a buffer
     char * obuf;
     if (mpi_rank == 0) obuf = (char *)malloc(img.w * total_h * sizeof(char));
 
+    // Calculate the number of pixels each process sends to rank 0 and the displacements
     int recvcnts[mpi_size], displs[mpi_size];
     displs[0] = 0;
     for (i = 0; i < mpi_size; i++) {
         recvcnts[i] = ((total_h + i) / mpi_size) * img.w;
         if (i < mpi_size - 1) displs[i + 1] = displs[i] + recvcnts[i];
     }
+    // Gather the pixels of the local images to rank 0 within the buffer
     MPI_Gatherv(img.img, img.w * img.h, MPI_UNSIGNED_CHAR, obuf, recvcnts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
+    // Rank 0 writes the result image to the file
     if (mpi_rank == 0) {
         FILE * out_file;
         out_file = fopen(path, "wb");

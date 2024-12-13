@@ -8,7 +8,6 @@
 
 void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin) {
 
-    // POSSIBLE SECTION TO PARALLELIZE.
     // Initialize each element of the histogram to 0. We decide not to parallelize this loop as it consists of only 256 iterations.
     int i;
     for (i = 0; i < nbr_bin; i++){
@@ -30,8 +29,12 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
     int hist_in[nbr_bin];
     int img_size, mpi_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    // Reduce the local histograms to get the global histogram
     MPI_Reduce(hist_in_local, hist_in, nbr_bin, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    // Reduce the local image sizes to get the global image size
     MPI_Reduce(&img_size_local, &img_size, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    // Only rank 0 constructs the LUT
     if (mpi_rank == 0) {
         int cdf, min, d;
         /* Construct the LUT by calculating the CDF */
@@ -51,9 +54,9 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
             }
         }
     }
+    // Broadcast the LUT to all processes
     MPI_Bcast(lut, nbr_bin, MPI_INT, 0, MPI_COMM_WORLD);
     
-    // POSSIBLE SECTION TO PARALLELIZE.
     /* Get the result image */
     #pragma omp parallel for schedule(static) // Iterations are evenly distibuted across threads (independent and identical operations)
         for(int i = 0; i < img_size_local; i ++){

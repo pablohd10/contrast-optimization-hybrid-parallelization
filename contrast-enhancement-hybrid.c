@@ -27,7 +27,6 @@ PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in){
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     
-    /* MAYBE PARALLELIZE THIS AS THEY ARE 3 INDEPENDENT OPERATIONS (r,g,b). HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
     histogram(hist, img_in.img_r, img_in.h * img_in.w, 256);
     histogram_equalization(result.img_r,img_in.img_r,hist,result.w*result.h, 256);
     histogram(hist, img_in.img_g, img_in.h * img_in.w, 256);
@@ -98,7 +97,6 @@ HSL_IMG rgb2hsl(PPM_IMG img_in){
     img_out.s = (float *)malloc(img_in.w * img_in.h * sizeof(float));
     img_out.l = (unsigned char *)malloc(img_in.w * img_in.h * sizeof(unsigned char));
     
-    // POSSIBLE SECTION TO PARALLELIZE using OpenMP.
     #pragma omp parallel for private(H,S,L) schedule(static)
     for(int i = 0; i < img_in.w*img_in.h; i ++){
         
@@ -174,7 +172,6 @@ PPM_IMG hsl2rgb(HSL_IMG img_in){
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     
-    // POSSIBLE SECTION TO PARALLELIZE.
     #pragma omp parallel for schedule(static)
     for(int i = 0; i < img_in.width*img_in.height; i ++){
         float H = img_in.h[i];
@@ -224,7 +221,6 @@ YUV_IMG rgb2yuv(PPM_IMG img_in){
     img_out.img_u = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
     img_out.img_v = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
 
-    // POSSIBLE SECTION TO PARALLELIZE.
     #pragma omp parallel for private(r, g, b, y, cb, cr) schedule(static)
     for(i = 0; i < img_out.w*img_out.h; i ++){
         r = img_in.img_r[i];
@@ -264,8 +260,7 @@ PPM_IMG yuv2rgb(YUV_IMG img_in){
     img_out.img_r = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
     img_out.img_g = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
     img_out.img_b = (unsigned char *)malloc(sizeof(unsigned char)*img_out.w*img_out.h);
-
-    // POSSIBLE SECTION TO PARALLELIZE.
+.
     #pragma omp parallel for private(y, cb, cr, rt, gt, bt) schedule(static)
     for(int i = 0; i < img_out.w*img_out.h; i ++){
         y  = (int)img_in.img_y[i];
