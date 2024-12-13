@@ -11,7 +11,7 @@ void run_cpu_gray_test(PGM_IMG img_in, int local_height, int total_height, int t
 
 // Auxiliary functions
 void save_results_to_file(double time_taken);
-void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, int *chunk_heights, int *chunk_pixels, int *displacements);
+void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, int *chunk_heights, int *displacements);
 
 #include <mpi.h>
 #include <stdio.h>
@@ -20,12 +20,6 @@ void calculate_chunk_pixels(int num_procesos, int total_width, int total_height,
 // Suponiendo que las estructuras PGM_IMG y PPM_IMG y las funciones
 // read_pgm, read_ppm, write_pgm, write_ppm, free_pgm, free_ppm,
 // run_cpu_gray_test, etc., están definidas correctamente.
-
-#define MASTER 0
-
-void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, 
-                            int *chunk_heights, int* chunk_pixels, int *displacements);
-
 int main(){
     MPI_Init(NULL, NULL);
 
@@ -45,9 +39,12 @@ int main(){
     MPI_Get_processor_name(node_name, &len_node_name);
 
     // Variables para chunking
-    int *chunk_heights = NULL;
-    int *chunk_pixels  = NULL;
-    int *displacements = NULL;
+    int *chunk_heights = (int *) malloc(num_procesos * sizeof(int));;
+    int *chunk_pixels  = (int *) malloc(num_procesos * sizeof(int));;
+    int *displacements = (int *) malloc(num_procesos * sizeof(int));;
+	//chunk_heights = (int *) malloc(num_procesos * sizeof(int));
+    //chunk_pixels  = (int *) malloc(num_procesos * sizeof(int));
+    //displacements = (int *) malloc(num_procesos * sizeof(int));
 
     // Solo el MASTER lee las imágenes y calcula los chunks
     if (rank == MASTER){
@@ -63,23 +60,17 @@ int main(){
         img_ibuf_c = read_ppm("in.ppm");
 
         // Calcular filas por proceso, píxeles y desplazamientos
-        chunk_heights = (int *) malloc(num_procesos * sizeof(int));
-        chunk_pixels  = (int *) malloc(num_procesos * sizeof(int));
-        displacements = (int *) malloc(num_procesos * sizeof(int));
-        calculate_chunk_pixels(num_procesos, total_width, total_height, chunk_heights, chunk_pixels, displacements);
+        calculate_chunk_pixels(num_procesos, total_width, total_height, chunk_heights, displacements);
+        
+		// We calculate n_pixels per chunk. Chunk_pixels acts as sendoccount
+        for(int i = 0; i < num_procesos; i++) 
+            chunk_pixels[i] = chunk_heights[i] * total_width;
     }
 
     // Broadcast de dimensiones a todos los procesos
     MPI_Bcast(&total_width, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(&total_height, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-
-    // Asignar memoria para chunk_heights, chunk_pixels y displacements en los procesos no MASTER
-    if (rank != MASTER){
-        chunk_heights = (int *) malloc(num_procesos * sizeof(int));
-        chunk_pixels  = (int *) malloc(num_procesos * sizeof(int));
-        displacements = (int *) malloc(num_procesos * sizeof(int));
-    }
-
+    
     // Distribuir chunk_heights, chunk_pixels y displacements a todos los procesos
     MPI_Bcast(chunk_heights, num_procesos, MPI_INT, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(chunk_pixels, num_procesos, MPI_INT, MASTER, MPI_COMM_WORLD);
@@ -100,35 +91,23 @@ int main(){
     local_img_c.img_g = (unsigned char *)malloc(local_pixels * sizeof(unsigned char));
     local_img_c.img_b = (unsigned char *)malloc(local_pixels * sizeof(unsigned char));
 
-    // Crear sendcounts basado en chunk_pixels
-    int *sendcounts = NULL;
-    if (rank == MASTER){
-        sendcounts = (int *) malloc(num_procesos * sizeof(int));
-        for(int i = 0; i < num_procesos; i++) {
-            sendcounts[i] = chunk_pixels[i];
-        }
-    }
 
     // Distribuir la imagen en gris usando Scatterv
-    MPI_Scatterv(img_ibuf_g.img, sendcounts, displacements, MPI_UNSIGNED_CHAR,
+    MPI_Scatterv(img_ibuf_g.img, chunk_pixels, displacements, MPI_UNSIGNED_CHAR,
                 local_img_g.img, local_pixels, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
 				 
     // Distribuir los canales de la imagen en color usando Scatterv
-    MPI_Scatterv(img_ibuf_c.img_r, sendcounts, displacements, MPI_UNSIGNED_CHAR,
+    MPI_Scatterv(img_ibuf_c.img_r, chunk_pixels, displacements, MPI_UNSIGNED_CHAR,
                 local_img_c.img_r, local_pixels, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-    MPI_Scatterv(img_ibuf_c.img_g, sendcounts, displacements, MPI_UNSIGNED_CHAR,
+    MPI_Scatterv(img_ibuf_c.img_g, chunk_pixels, displacements, MPI_UNSIGNED_CHAR,
                 local_img_c.img_g, local_pixels, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
-    MPI_Scatterv(img_ibuf_c.img_b, sendcounts, displacements, MPI_UNSIGNED_CHAR,
+    MPI_Scatterv(img_ibuf_c.img_b, chunk_pixels, displacements, MPI_UNSIGNED_CHAR,
                 local_img_c.img_b, local_pixels, MPI_UNSIGNED_CHAR,
                 MASTER, MPI_COMM_WORLD);
                  
-    // Liberar sendcounts en el MASTER
-    if (rank == MASTER){
-        free(sendcounts);
-    }
 
     // Procesamiento de imágenes
     printf("Running contrast enhancement for gray-scale images.\n");
@@ -150,14 +129,10 @@ int main(){
 
         free_pgm(img_ibuf_g);
         free_ppm(img_ibuf_c);
-		free(chunk_heights);
-		free(chunk_pixels);
-		free(displacements);
-    } else {
-        free(chunk_heights);
-        free(chunk_pixels);
-        free(displacements);
-    }
+    } 
+	free(chunk_heights);
+	free(chunk_pixels);
+	free(displacements);
 
     MPI_Finalize();
 
@@ -166,7 +141,7 @@ int main(){
 
 
 void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, 
-                            int *chunk_heights, int* chunk_pixels, int *displacements) {
+                            int *chunk_heights, int *displacements) {
     int base_rows = total_height / num_procesos;
     int remainder_rows = total_height % num_procesos;
 
@@ -175,9 +150,8 @@ void calculate_chunk_pixels(int num_procesos, int total_width, int total_height,
     for (int i = 0; i < num_procesos; i++) {
         // Asigna una fila adicional a los primeros procesos si hay filas restantes
         chunk_heights[i] = base_rows + (i < remainder_rows ? 1 : 0);
-        chunk_pixels[i] = chunk_heights[i] * total_width;
         displacements[i] = offset;
-        offset += chunk_pixels[i];
+        offset += chunk_heights[i] * total_width;
     }
 }
 

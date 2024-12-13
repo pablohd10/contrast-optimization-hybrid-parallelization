@@ -18,3 +18,7 @@ build/mpi-omp-output/*
 !build/mpi-omp-output/time_results.txt
 
 .vscode
+
+*.ppm
+*.pgm
+
