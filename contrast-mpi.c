@@ -42,12 +42,13 @@ int main(){
 
 void save_results_to_file(double time_taken_local) {
     /*This function saves the time taken to process the images to a file only if the program is running on the 'gpus' partition of the Slurm cluster.*/
+    // Reduce the time taken to process the images to get the maximum time taken
     double time_taken;
     MPI_Reduce(&time_taken_local, &time_taken, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     
     int mpi_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-    if (mpi_rank != 0) return;
+    if (mpi_rank != 0) return; // Only rank 0 writes to the file
 
     // Get Slurm job information
     const char* partition = getenv("SLURM_JOB_PARTITION");
@@ -226,7 +227,6 @@ void write_ppm(PPM_IMG img, const char * path){
     }
     // Gather the pixels of the local images to rank 0
     MPI_Gatherv(sendbuf, 3 * img.w * img.h, MPI_UNSIGNED_CHAR, obuf, recvcnts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
 
     free(sendbuf);
     // Rank 0 writes the result image to the file

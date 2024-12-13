@@ -10,7 +10,6 @@ void run_cpu_color_test(PPM_IMG img_in);
 void run_cpu_gray_test(PGM_IMG img_in);
 void save_results_to_file(double time_taken, int max_threads);
 
-
 int main(){
     PGM_IMG img_ibuf_g;
     PPM_IMG img_ibuf_c;
@@ -24,9 +23,6 @@ int main(){
     omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 12-1 = 11 threads)
     int max_threads = omp_get_max_threads();
 
-    // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (ppm and pgm). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
-    // HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
-    // pgm
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
     run_cpu_gray_test(img_ibuf_g);
