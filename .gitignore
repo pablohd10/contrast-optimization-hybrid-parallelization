@@ -13,8 +13,8 @@ build/omp-output/*
 build/mpi-output/*
 !build/mpi-output/time_results.txt
 
-!build/mpi-omp-output
-build/mpi-omp-output/*
-!build/mpi-omp-output/time_results.txt
+!build/hybrid-output
+build/hybrid-output/*
+!build/hybrid-output/time_results.txt
 
 .vscode
