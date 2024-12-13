@@ -24,9 +24,6 @@ int main(){
     omp_set_num_threads(omp_get_num_procs() - 1); // 1 core for the OS (in the GPUs partition, we will have 12-1 = 11 threads)
     int max_threads = omp_get_max_threads();
 
-    // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (ppm and pgm). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
-    // HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
-    // pgm
     printf("Running contrast enhancement for gray-scale images.\n");
     img_ibuf_g = read_pgm("in.pgm");
     run_cpu_gray_test(img_ibuf_g);
@@ -88,8 +85,6 @@ void run_cpu_color_test(PPM_IMG img_in){
     
     printf("Starting CPU processing...\n");
     
-    // POSSIBLE SECTION TO PARALLELIZE: ONE THREAD FOR EACH IMAGE (hsl and yuv). THIS WOULD IMPLY NESTED PARALLELISM, as each function has its own parallel regions.
-    // HOWEVER maybe oversubscription is produced since we will have many threads at the same time as each of these functions are also parallelized (for loops)
     tstart = MPI_Wtime();
     img_obuf_hsl = contrast_enhancement_c_hsl(img_in);
     tend = MPI_Wtime();
@@ -154,8 +149,8 @@ PPM_IMG read_ppm(const char * path){
     
     fread(ibuf,sizeof(unsigned char), 3 * result.w*result.h, in_file);
 
-    // POSSIBLE SECTION TO PARALLELIZE. This loop goes through each pixel of the image and assigns the RGB values to the corresponding arrays. (O(w*h) time complexity)
-    #pragma omp parallel for schedule(static)
+    // Go through all pixels --> parallelize
+    #pragma omp parallel for schedule(static) // Iterations are evenly distibuted across threads (static scheduling)
     for (i = 0; i < result.w * result.h; i++) {
         result.img_r[i] = ibuf[3 * i + 0];
         result.img_g[i] = ibuf[3 * i + 1];
@@ -174,8 +169,8 @@ void write_ppm(PPM_IMG img, const char * path){
     
     char * obuf = (char *)malloc(3 * img.w * img.h * sizeof(char));
 
-    // POSSIBLE SECTION TO PARALLELIZE. This loop goes through each pixel of the image and assigns the RGB values to the corresponding position of obuf. (O(w*h) time complexity)
-    #pragma omp parallel for schedule(static)
+    // Go through all pixels --> parallelize
+    #pragma omp parallel for schedule(static) // Iterations are evenly distibuted across threads (static scheduling)
     for(i = 0; i < img.w*img.h; i ++){
         obuf[3*i + 0] = img.img_r[i];
         obuf[3*i + 1] = img.img_g[i];

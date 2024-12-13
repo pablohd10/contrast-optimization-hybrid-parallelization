@@ -7,7 +7,6 @@
 
 void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin) {
 
-    // POSSIBLE SECTION TO PARALLELIZE.
     // Initialize each element of the histogram to 0. We decide not to parallelize this loop as it consists of only 256 iterations.
     int i;
     for (i = 0; i < nbr_bin; i++){
@@ -15,7 +14,7 @@ void histogram(int * hist_out, unsigned char * img_in, int img_size, int nbr_bin
     }
 
     // Count the number of occurrences in the image for each pixel value
-    #pragma omp parallel for reduction(+: hist_out[:nbr_bin]) schedule(static)// Reduction addition operation on hist_out. Iterations are evenly distibuted across threads
+    #pragma omp parallel for reduction(+: hist_out[:nbr_bin]) schedule(static)// Reduction addition operation on hist_out. Iterations are evenly distibuted across threads (static scheduling)
     for (int i = 0; i < img_size; i++) {
         hist_out[img_in[i]]++; 
     }
@@ -34,7 +33,6 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
     }
     d = img_size - min;
 
-    // POSSIBLE SECTION TO PARALLELIZE.
     // We decide not to parallelize this loop as it consists of only 256 iterations.
     for(i = 0; i < nbr_bin; i ++){
         cdf += hist_in[i];
@@ -47,9 +45,8 @@ void histogram_equalization(unsigned char * img_out, unsigned char * img_in,
         
     }
     
-    // POSSIBLE SECTION TO PARALLELIZE.
     /* Get the result image */
-    #pragma omp parallel for schedule(static) // Iterations are evenly distibuted across threads (independent and identical operations)
+    #pragma omp parallel for schedule(static) // Iterations are evenly distibuted across threads (static scheduling)
         for(int i = 0; i < img_size; i ++){
             if(lut[img_in[i]] > 255){
                 img_out[i] = 255;

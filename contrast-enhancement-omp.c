@@ -27,7 +27,6 @@ PPM_IMG contrast_enhancement_c_rgb(PPM_IMG img_in){
     result.img_g = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     result.img_b = (unsigned char *)malloc(result.w * result.h * sizeof(unsigned char));
     
-    /* MAYBE PARALLELIZE THIS AS THEY ARE 3 INDEPENDENT OPERATIONS (r,g,b). HOWEVER maybe oversubscription is produced since we will have many threads at the same time since each of these functions are also parallelized (for loops)*/
     histogram(hist, img_in.img_r, img_in.h * img_in.w, 256);
     histogram_equalization(result.img_r,img_in.img_r,hist,result.w*result.h, 256);
     histogram(hist, img_in.img_g, img_in.h * img_in.w, 256);
@@ -98,8 +97,8 @@ HSL_IMG rgb2hsl(PPM_IMG img_in){
     img_out.s = (float *)malloc(img_in.w * img_in.h * sizeof(float));
     img_out.l = (unsigned char *)malloc(img_in.w * img_in.h * sizeof(unsigned char));
     
-    // POSSIBLE SECTION TO PARALLELIZE using OpenMP.
-    #pragma omp parallel for private(H,S,L) schedule(static)
+    // Parallelize this loop as it goes through all the pixels in the image.
+    #pragma omp parallel for private(H,S,L) schedule(static) // Iterations are evenly distibuted across threads (static scheduling)
     for(int i = 0; i < img_in.w*img_in.h; i ++){
         
         float var_r = ( (float)img_in.img_r[i]/255 );//Convert RGB to [0,1]
