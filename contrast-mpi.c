@@ -11,7 +11,7 @@ void run_cpu_gray_test(PGM_IMG img_in, int local_height, int total_height, int t
 
 // Auxiliary functions
 void save_results_to_file(double time_taken);
-void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, int *chunk_heights, int *displacements);
+void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, int *chunk_heights, int *chunk_pixels, int *displacements);
 
 #include <mpi.h>
 #include <stdio.h>
@@ -42,9 +42,6 @@ int main(){
     int *chunk_heights = (int *) malloc(num_procesos * sizeof(int));;
     int *chunk_pixels  = (int *) malloc(num_procesos * sizeof(int));;
     int *displacements = (int *) malloc(num_procesos * sizeof(int));;
-	//chunk_heights = (int *) malloc(num_procesos * sizeof(int));
-    //chunk_pixels  = (int *) malloc(num_procesos * sizeof(int));
-    //displacements = (int *) malloc(num_procesos * sizeof(int));
 
     // Solo el MASTER lee las imágenes y calcula los chunks
     if (rank == MASTER){
@@ -59,12 +56,8 @@ int main(){
         printf("MASTER process (%d) reading ppm image.\n", rank);
         img_ibuf_c = read_ppm("in.ppm");
 
-        // Calcular filas por proceso, píxeles y desplazamientos
-        calculate_chunk_pixels(num_procesos, total_width, total_height, chunk_heights, displacements);
-        
-		// We calculate n_pixels per chunk. Chunk_pixels acts as sendoccount
-        for(int i = 0; i < num_procesos; i++) 
-            chunk_pixels[i] = chunk_heights[i] * total_width;
+        // We calculate n_rows, n_pixels and offests per chunk 
+        calculate_chunk_pixels(num_procesos, total_width, total_height, chunk_heights, chunk_pixels, displacements);
     }
 
     // Broadcast de dimensiones a todos los procesos
@@ -141,16 +134,17 @@ int main(){
 
 
 void calculate_chunk_pixels(int num_procesos, int total_width, int total_height, 
-                            int *chunk_heights, int *displacements) {
+                            int *chunk_heights, int *chunk_pixels, int *displacements) {
     int base_rows = total_height / num_procesos;
     int remainder_rows = total_height % num_procesos;
 
     int offset = 0;
 
     for (int i = 0; i < num_procesos; i++) {
-        // Asigna una fila adicional a los primeros procesos si hay filas restantes
+        // Asignamos una fila adicional a los primeros procesos si hay filas restantes
         chunk_heights[i] = base_rows + (i < remainder_rows ? 1 : 0);
         displacements[i] = offset;
+		chunk_pixels[i] = chunk_heights[i] * total_width;
         offset += chunk_heights[i] * total_width;
     }
 }
@@ -302,11 +296,6 @@ void run_cpu_gray_test(PGM_IMG img_in, int local_height, int total_height, int t
 
     // After gathering, MASTER saves the image
     if (rank == MASTER) {
-		//printf("width_result: %d\n",img_obuf_final.w);
-		//printf("height_result: %d\n",img_obuf_final.h);
-		
-		//for (int i = 0; i <1000 ;i++) printf("%d",img_obuf_final.img[i]);
-		
         write_pgm(img_obuf_final, "./mpi-output/out.pgm");
         free_pgm(img_obuf_final);
 		free(chunk_pixels);
