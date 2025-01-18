@@ -38,5 +38,3 @@ srun -p gpus -N <número de nodos> -n <número de tareas> ./contrast
 descargar versiones:
  - openmpi _(mejor integración con pmix)_
  - mpich (no se puede usar para usos comerciales)
-  -> _(misma interfaz pero mejor runtime, le gusta más al profe)_
-(o algo asi)
